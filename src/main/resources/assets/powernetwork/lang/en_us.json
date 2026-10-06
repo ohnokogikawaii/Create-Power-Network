@@ -1,0 +1,13 @@
+{
+  "itemGroup.powernetwork": "Example Mod Tab",
+  "block.powernetwork.example_block": "Example Block",
+  "item.powernetwork.example_item": "Example Item",
+
+  "powernetwork.configuration.title": "Power Network Configs",
+  "powernetwork.configuration.section.powernetwork.common.toml": "Power Network Configs",
+  "powernetwork.configuration.section.powernetwork.common.toml.title": "Power Network Configs",
+  "powernetwork.configuration.items": "Item List",
+  "powernetwork.configuration.logDirtBlock": "Log Dirt Block",
+  "powernetwork.configuration.magicNumberIntroduction": "Magic Number Text",
+  "powernetwork.configuration.magicNumber": "Magic Number"
+}
