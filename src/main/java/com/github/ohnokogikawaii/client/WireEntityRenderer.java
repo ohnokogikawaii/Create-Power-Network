@@ -4,7 +4,6 @@ package com.github.ohnokogikawaii.client;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
@@ -15,10 +14,10 @@ import net.minecraft.world.phys.Vec3;
 
 public class WireEntityRenderer extends EntityRenderer<WireEntity> {
 
-    /*
-     * テクスチャを繰り返す間隔（ブロック単位）。
-     * 1.0なら、ワイヤーの長さ1ブロックごとにテクスチャを繰り返す。
-     */
+    // 円周を分割する数。増やすほど滑らかな円になる。
+    private static final int RADIAL_SEGMENTS = 12;
+
+    // テクスチャを繰り返す間隔（ブロック単位）。
     private static final double TEXTURE_REPEAT_LENGTH = 0.1;
 
     public WireEntityRenderer(EntityRendererProvider.Context context) {
@@ -39,35 +38,25 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
         Vec3 a = entity.getEndpointAPosition().subtract(origin);
         Vec3 b = entity.getEndpointBPosition().subtract(origin);
 
-        Vec3 direction = b.subtract(a);
-        double length = direction.length();
+        Vec3 axis = b.subtract(a);
+        double length = axis.length();
 
         if (length < 1.0E-8) {
             return;
         }
 
-        direction = direction.scale(1.0 / length);
+        axis = axis.scale(1.0 / length);
 
-        Vec3 cameraPosition = Minecraft.getInstance()
-                .gameRenderer
-                .getMainCamera()
-                .getPosition();
+        // ワイヤーの軸に垂直な2方向を作る。
+        Vec3 reference = Math.abs(axis.y) < 0.9
+                ? new Vec3(0, 1, 0)
+                : new Vec3(1, 0, 0);
 
-        Vec3 view = cameraPosition.subtract(origin);
-        Vec3 side = direction.cross(view);
+        Vec3 basis1 = axis.cross(reference).normalize();
+        Vec3 basis2 = axis.cross(basis1).normalize();
 
-        if (side.lengthSqr() < 1.0E-8) {
-            side = direction.cross(new Vec3(0, 1, 0));
-        }
-
-        if (side.lengthSqr() < 1.0E-8) {
-            side = direction.cross(new Vec3(1, 0, 0));
-        }
-
-        double halfWidth =
+        double radius =
                 entity.getWireType().getRenderThickness() / 2.0;
-
-        side = side.normalize().scale(halfWidth);
 
         ResourceLocation texture = getTextureLocation(entity);
 
@@ -77,10 +66,6 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
 
         PoseStack.Pose pose = poseStack.last();
 
-        /*
-         * ワイヤーを複数の区間に分け、区間ごとにU座標を
-         * 0～1へ戻すことでテクスチャを繰り返す。
-         */
         double distance = 0.0;
 
         while (distance < length) {
@@ -89,28 +74,51 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                     length - distance
             );
 
-            double t0 = distance / length;
-            double t1 = (distance + segmentLength) / length;
+            double startDistance = distance;
+            double endDistance = distance + segmentLength;
 
-            Vec3 segmentA = a.add(direction.scale(distance));
-            Vec3 segmentB = a.add(
-                    direction.scale(distance + segmentLength)
-            );
-
-            Vec3 a1 = segmentA.subtract(side);
-            Vec3 a2 = segmentA.add(side);
-            Vec3 b1 = segmentB.subtract(side);
-            Vec3 b2 = segmentB.add(side);
+            Vec3 startCenter = a.add(axis.scale(startDistance));
+            Vec3 endCenter = a.add(axis.scale(endDistance));
 
             float u0 = 0.0F;
-            float u1 = (float) (segmentLength / TEXTURE_REPEAT_LENGTH);
+            float u1 = (float) (
+                    segmentLength / TEXTURE_REPEAT_LENGTH
+            );
 
-            addVertex(buffer, pose, a1, u0, 0.0F, packedLight);
-            addVertex(buffer, pose, a2, u0, 1.0F, packedLight);
-            addVertex(buffer, pose, b2, u1, 1.0F, packedLight);
-            addVertex(buffer, pose, b1, u1, 0.0F, packedLight);
+            for (int i = 0; i < RADIAL_SEGMENTS; i++) {
+                double angle0 =
+                        2.0 * Math.PI * i / RADIAL_SEGMENTS;
+                double angle1 =
+                        2.0 * Math.PI * (i + 1) / RADIAL_SEGMENTS;
 
-            distance += segmentLength;
+                Vec3 normal0 = basis1.scale(Math.cos(angle0))
+                        .add(basis2.scale(Math.sin(angle0)))
+                        .normalize();
+
+                Vec3 normal1 = basis1.scale(Math.cos(angle1))
+                        .add(basis2.scale(Math.sin(angle1)))
+                        .normalize();
+
+                Vec3 a0 = startCenter.add(normal0.scale(radius));
+                Vec3 a1 = startCenter.add(normal1.scale(radius));
+                Vec3 b0 = endCenter.add(normal0.scale(radius));
+                Vec3 b1 = endCenter.add(normal1.scale(radius));
+
+                float v0 = (float) i / RADIAL_SEGMENTS;
+                float v1 = (float) (i + 1) / RADIAL_SEGMENTS;
+
+                // 1面分の四角形。Uは長さ方向、Vは円周方向。
+                addVertex(buffer, pose, a0, normal0,
+                        u0, v0, packedLight);
+                addVertex(buffer, pose, a1, normal1,
+                        u0, v1, packedLight);
+                addVertex(buffer, pose, b1, normal1,
+                        u1, v1, packedLight);
+                addVertex(buffer, pose, b0, normal0,
+                        u1, v0, packedLight);
+            }
+
+            distance = endDistance;
         }
     }
 
@@ -118,6 +126,7 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
             VertexConsumer buffer,
             PoseStack.Pose pose,
             Vec3 position,
+            Vec3 normal,
             float u,
             float v,
             int packedLight
@@ -132,7 +141,12 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                 .setUv(u, v)
                 .setOverlay(OverlayTexture.NO_OVERLAY)
                 .setLight(packedLight)
-                .setNormal(pose, 0, 1, 0);
+                .setNormal(
+                        pose,
+                        (float) normal.x,
+                        (float) normal.y,
+                        (float) normal.z
+                );
     }
 
     @Override
