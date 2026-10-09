@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "powernetwork:block/connector/terminal"
+    }
+  }
+}
