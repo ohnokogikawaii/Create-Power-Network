@@ -1,8 +1,10 @@
+
 package com.github.ohnokogikawaii.client;
 
 import com.github.ohnokogikawaii.wire.WireEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -10,12 +12,6 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 
-/**
- * First-stage wire renderer.
- *
- * It renders a straight line between the two physical endpoints.
- * Catenary/sag will be added later.
- */
 public class WireEntityRenderer extends EntityRenderer<WireEntity> {
 
     public WireEntityRenderer(EntityRendererProvider.Context context) {
@@ -35,23 +31,84 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
         Vec3 a = entity.getEndpointAPosition().subtract(origin);
         Vec3 b = entity.getEndpointBPosition().subtract(origin);
 
-        VertexConsumer buffer = bufferSource.getBuffer(RenderType.lines());
+        Vec3 direction = b.subtract(a);
+        if (direction.lengthSqr() < 1.0E-8) {
+            return;
+        }
+        direction = direction.normalize();
+
+        Vec3 cameraPosition =
+                Minecraft.getInstance()
+                        .gameRenderer
+                        .getMainCamera()
+                        .getPosition();
+
+        Vec3 view = cameraPosition.subtract(origin);
+        Vec3 side = direction.cross(view);
+
+        if (side.lengthSqr() < 1.0E-8) {
+            side = direction.cross(new Vec3(0, 1, 0));
+        }
+        if (side.lengthSqr() < 1.0E-8) {
+            side = direction.cross(new Vec3(1, 0, 0));
+        }
+
+        double halfWidth = entity.getWireType().getRenderThickness() / 2.0;
+        side = side.normalize().scale(halfWidth);
+
+        Vec3 a1 = a.subtract(side);
+        Vec3 a2 = a.add(side);
+        Vec3 b1 = b.subtract(side);
+        Vec3 b2 = b.add(side);
+
+        ResourceLocation texture = getTextureLocation(entity);
+        VertexConsumer buffer =
+                bufferSource.getBuffer(RenderType.entityCutoutNoCull(texture));
+
         PoseStack.Pose pose = poseStack.last();
 
-        buffer.addVertex(pose, (float) a.x, (float) a.y, (float) a.z)
-                .setColor(40, 40, 40, 255)
-                .setNormal(pose, 0.0F, 1.0F, 0.0F);
+        addVertex(buffer, pose, a1, 0, 0, packedLight);
+        addVertex(buffer, pose, a2, 0, 1, packedLight);
+        addVertex(buffer, pose, b2, 1, 1, packedLight);
+        addVertex(buffer, pose, b1, 1, 0, packedLight);
 
-        buffer.addVertex(pose, (float) b.x, (float) b.y, (float) b.z)
-                .setColor(40, 40, 40, 255)
-                .setNormal(pose, 0.0F, 1.0F, 0.0F);
+        super.render(
+                entity,
+                entityYaw,
+                partialTick,
+                poseStack,
+                bufferSource,
+                packedLight
+        );
+    }
+
+    private static void addVertex(
+            VertexConsumer buffer,
+            PoseStack.Pose pose,
+            Vec3 position,
+            float u,
+            float v,
+            int packedLight
+    ) {
+        buffer.addVertex(
+                        pose,
+                        (float) position.x,
+                        (float) position.y,
+                        (float) position.z
+                )
+                .setColor(255, 255, 255, 255)
+                .setUv(u, v)
+                .setLight(packedLight)
+                .setNormal(pose, 0, 1, 0);
     }
 
     @Override
     public ResourceLocation getTextureLocation(WireEntity entity) {
+        ResourceLocation texture = entity.getWireType().getTexture();
+
         return ResourceLocation.fromNamespaceAndPath(
-                "minecraft",
-                "textures/block/iron_block.png"
+                texture.getNamespace(),
+                "textures/" + texture.getPath() + ".png"
         );
     }
 }
