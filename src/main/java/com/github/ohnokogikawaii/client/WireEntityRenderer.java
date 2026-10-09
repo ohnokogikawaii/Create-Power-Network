@@ -26,7 +26,7 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
 
     // 仮の標準余長。直線距離に対して2%長いワイヤーとして垂れを計算する。
     // 実際の設置長を導入した段階で、その値から垂れを計算する方式に変更する。
-    private static final double DEFAULT_SLACK_RATIO = 1.02;
+    private static final double DEFAULT_SLACK_RATIO = 1.005;
 
     public WireEntityRenderer(EntityRendererProvider.Context context) {
         super(context);
