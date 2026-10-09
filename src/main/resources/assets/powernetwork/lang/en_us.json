@@ -9,5 +9,14 @@
   "powernetwork.configuration.items": "Item List",
   "powernetwork.configuration.logDirtBlock": "Log Dirt Block",
   "powernetwork.configuration.magicNumberIntroduction": "Magic Number Text",
-  "powernetwork.configuration.magicNumber": "Magic Number"
+  "powernetwork.configuration.magicNumber": "Magic Number",
+  "item.powernetwork.copper_wire": "Copper Wire",
+  "block.powernetwork.terminal": "Terminal",
+  "itemGroup.powernetwork": "Power Network",
+  "message.powernetwork.wire.first_endpoint": "First terminal selected",
+  "message.powernetwork.wire.same_endpoint": "Cannot connect to the same terminal",
+  "message.powernetwork.wire.too_close": "The wire is too short",
+  "message.powernetwork.wire.too_long": "The wire is too long",
+  "message.powernetwork.wire.connected": "Copper wire connected"
 }
+

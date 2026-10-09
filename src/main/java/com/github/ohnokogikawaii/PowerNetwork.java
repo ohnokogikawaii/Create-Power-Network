@@ -31,10 +31,10 @@ public class PowerNetwork {
                     () -> CreativeModeTab.builder()
                             .title(Component.translatable("itemGroup.powernetwork"))
                             .withTabsBefore(CreativeModeTabs.REDSTONE_BLOCKS)
-                            .icon(() -> ModItems.WIRE.get().getDefaultInstance())
+                            .icon(() -> ModItems.COPPER_WIRE.get().getDefaultInstance())
                             .displayItems((parameters, output) -> {
                                 output.accept(ModItems.TERMINAL.get());
-                                output.accept(ModItems.WIRE.get());
+                                output.accept(ModItems.COPPER_WIRE.get());
                             })
                             .build()
             );

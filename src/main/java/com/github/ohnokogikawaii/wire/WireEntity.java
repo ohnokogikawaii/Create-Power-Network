@@ -6,6 +6,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.Level;
@@ -26,29 +27,52 @@ public class WireEntity extends Entity {
                     EntityDataSerializers.BLOCK_POS
             );
 
-    /**
-     * EntityTypeから生成されるコンストラクター。
-     * EntityType.Builder.of(WireEntity::new, ...) から使用される。
-     */
-    public WireEntity(EntityType<? extends WireEntity> entityType, Level level) {
+    private static final EntityDataAccessor<String> WIRE_TYPE =
+            SynchedEntityData.defineId(
+                    WireEntity.class,
+                    EntityDataSerializers.STRING
+            );
+
+    public WireEntity(
+            EntityType<? extends WireEntity> entityType,
+            Level level
+    ) {
         super(entityType, level);
         this.noPhysics = true;
     }
 
-    /**
-     * ワイヤーを新規作成するときに使用するコンストラクター。
-     */
-    public WireEntity(Level level, BlockPos endpointA, BlockPos endpointB) {
+    public WireEntity(
+            Level level,
+            BlockPos endpointA,
+            BlockPos endpointB,
+            ResourceLocation wireTypeId
+    ) {
         this(ModEntities.WIRE.get(), level);
 
         setEndpoints(endpointA, endpointB);
+        setWireTypeId(wireTypeId);
+
         updatePosition();
     }
 
     @Override
-    protected void defineSynchedData(SynchedEntityData.Builder builder) {
-        builder.define(ENDPOINT_A, BlockPos.ZERO);
-        builder.define(ENDPOINT_B, BlockPos.ZERO);
+    protected void defineSynchedData(
+            SynchedEntityData.Builder builder
+    ) {
+        builder.define(
+                ENDPOINT_A,
+                BlockPos.ZERO
+        );
+
+        builder.define(
+                ENDPOINT_B,
+                BlockPos.ZERO
+        );
+
+        builder.define(
+                WIRE_TYPE,
+                "powernetwork:copper"
+        );
     }
 
     public BlockPos getEndpointA() {
@@ -59,21 +83,58 @@ public class WireEntity extends Entity {
         return entityData.get(ENDPOINT_B);
     }
 
-    public void setEndpoints(BlockPos endpointA, BlockPos endpointB) {
-        entityData.set(ENDPOINT_A, endpointA.immutable());
-        entityData.set(ENDPOINT_B, endpointB.immutable());
+    public void setEndpoints(
+            BlockPos endpointA,
+            BlockPos endpointB
+    ) {
+        entityData.set(
+                ENDPOINT_A,
+                endpointA.immutable()
+        );
+
+        entityData.set(
+                ENDPOINT_B,
+                endpointB.immutable()
+        );
     }
 
-    public Vec3 getEndpointWorldPosition(BlockPos endpoint) {
+    public ResourceLocation getWireTypeId() {
+        return ResourceLocation.parse(
+                entityData.get(WIRE_TYPE)
+        );
+    }
+
+    public void setWireTypeId(
+            ResourceLocation wireTypeId
+    ) {
+        entityData.set(
+                WIRE_TYPE,
+                wireTypeId.toString()
+        );
+    }
+
+    public WireType getWireType() {
+        return WireTypeManager.get(
+                getWireTypeId()
+        );
+    }
+
+    public Vec3 getEndpointWorldPosition(
+            BlockPos endpoint
+    ) {
         return Vec3.atCenterOf(endpoint);
     }
 
     public Vec3 getEndpointAWorldPosition() {
-        return getEndpointWorldPosition(getEndpointA());
+        return getEndpointWorldPosition(
+                getEndpointA()
+        );
     }
 
     public Vec3 getEndpointBWorldPosition() {
-        return getEndpointWorldPosition(getEndpointB());
+        return getEndpointWorldPosition(
+                getEndpointB()
+        );
     }
 
     public Vec3 getEndpointAPosition() {
@@ -88,9 +149,14 @@ public class WireEntity extends Entity {
         Vec3 a = getEndpointAWorldPosition();
         Vec3 b = getEndpointBWorldPosition();
 
-        Vec3 center = a.add(b).scale(0.5);
+        Vec3 center =
+                a.add(b).scale(0.5);
 
-        setPos(center.x, center.y, center.z);
+        setPos(
+                center.x,
+                center.y,
+                center.z
+        );
     }
 
     @Override
@@ -98,9 +164,13 @@ public class WireEntity extends Entity {
         super.tick();
 
         if (!level().isClientSide) {
-            if (!(level().getBlockState(getEndpointA()).getBlock()
+            if (!(level()
+                    .getBlockState(getEndpointA())
+                    .getBlock()
                     instanceof TerminalBlock)
-                    || !(level().getBlockState(getEndpointB()).getBlock()
+                    || !(level()
+                    .getBlockState(getEndpointB())
+                    .getBlock()
                     instanceof TerminalBlock)) {
 
                 discard();
@@ -112,36 +182,74 @@ public class WireEntity extends Entity {
     }
 
     @Override
-    protected void addAdditionalSaveData(CompoundTag tag) {
+    protected void addAdditionalSaveData(
+            CompoundTag tag
+    ) {
         BlockPos a = getEndpointA();
         BlockPos b = getEndpointB();
 
-        tag.putLong("EndpointA", a.asLong());
-        tag.putLong("EndpointB", b.asLong());
+        tag.putLong(
+                "EndpointA",
+                a.asLong()
+        );
+
+        tag.putLong(
+                "EndpointB",
+                b.asLong()
+        );
+
+        tag.putString(
+                "WireType",
+                getWireTypeId().toString()
+        );
     }
 
     @Override
-    protected void readAdditionalSaveData(CompoundTag tag) {
-        BlockPos a = BlockPos.of(tag.getLong("EndpointA"));
-        BlockPos b = BlockPos.of(tag.getLong("EndpointB"));
+    protected void readAdditionalSaveData(
+            CompoundTag tag
+    ) {
+        BlockPos a =
+                BlockPos.of(
+                        tag.getLong("EndpointA")
+                );
+
+        BlockPos b =
+                BlockPos.of(
+                        tag.getLong("EndpointB")
+                );
+
+        ResourceLocation wireTypeId =
+                ResourceLocation.parse(
+                        tag.getString("WireType")
+                );
 
         setEndpoints(a, b);
+        setWireTypeId(wireTypeId);
+
         updatePosition();
     }
 
     @Override
     public AABB getBoundingBoxForCulling() {
-        Vec3 a = getEndpointAWorldPosition();
-        Vec3 b = getEndpointBWorldPosition();
+        Vec3 a =
+                getEndpointAWorldPosition();
+
+        Vec3 b =
+                getEndpointBWorldPosition();
 
         return new AABB(a, b).inflate(0.25);
     }
 
     @Override
-    public boolean shouldRenderAtSqrDistance(double distance) {
-        double size = getBoundingBoxForCulling().getSize();
+    public boolean shouldRenderAtSqrDistance(
+            double distance
+    ) {
+        double size =
+                getBoundingBoxForCulling().getSize();
+
         size = Math.max(size, 1.0);
 
-        return distance < size * size * 64.0;
+        return distance <
+                size * size * 64.0;
     }
 }
