@@ -10,8 +10,8 @@
     "maximumVoltage": 600.0
   },
   "render": {
-    "texture": "powernetwork:wire/copper",
-    "thickness": 0.025
+    "texture": "powernetwork:wire/copper_wire",
+    "thickness": 0.075
   },
   "properties": {
     "insulated": false,

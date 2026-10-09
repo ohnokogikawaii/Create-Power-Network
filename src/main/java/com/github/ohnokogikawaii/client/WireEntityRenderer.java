@@ -1,3 +1,4 @@
+
 package com.github.ohnokogikawaii.client;
 
 import com.github.ohnokogikawaii.wire.WireEntity;
@@ -5,14 +6,20 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 
 public class WireEntityRenderer extends EntityRenderer<WireEntity> {
+
+    /*
+     * テクスチャを繰り返す間隔（ブロック単位）。
+     * 1.0なら、ワイヤーの長さ1ブロックごとにテクスチャを繰り返す。
+     */
+    private static final double TEXTURE_REPEAT_LENGTH = 0.1;
 
     public WireEntityRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -33,12 +40,13 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
         Vec3 b = entity.getEndpointBPosition().subtract(origin);
 
         Vec3 direction = b.subtract(a);
+        double length = direction.length();
 
-        if (direction.lengthSqr() < 1.0E-8) {
+        if (length < 1.0E-8) {
             return;
         }
 
-        direction = direction.normalize();
+        direction = direction.scale(1.0 / length);
 
         Vec3 cameraPosition = Minecraft.getInstance()
                 .gameRenderer
@@ -61,11 +69,6 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
 
         side = side.normalize().scale(halfWidth);
 
-        Vec3 a1 = a.subtract(side);
-        Vec3 a2 = a.add(side);
-        Vec3 b1 = b.subtract(side);
-        Vec3 b2 = b.add(side);
-
         ResourceLocation texture = getTextureLocation(entity);
 
         VertexConsumer buffer = bufferSource.getBuffer(
@@ -74,10 +77,41 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
 
         PoseStack.Pose pose = poseStack.last();
 
-        addVertex(buffer, pose, a1, 0, 0, packedLight);
-        addVertex(buffer, pose, a2, 0, 1, packedLight);
-        addVertex(buffer, pose, b2, 1, 1, packedLight);
-        addVertex(buffer, pose, b1, 1, 0, packedLight);
+        /*
+         * ワイヤーを複数の区間に分け、区間ごとにU座標を
+         * 0～1へ戻すことでテクスチャを繰り返す。
+         */
+        double distance = 0.0;
+
+        while (distance < length) {
+            double segmentLength = Math.min(
+                    TEXTURE_REPEAT_LENGTH,
+                    length - distance
+            );
+
+            double t0 = distance / length;
+            double t1 = (distance + segmentLength) / length;
+
+            Vec3 segmentA = a.add(direction.scale(distance));
+            Vec3 segmentB = a.add(
+                    direction.scale(distance + segmentLength)
+            );
+
+            Vec3 a1 = segmentA.subtract(side);
+            Vec3 a2 = segmentA.add(side);
+            Vec3 b1 = segmentB.subtract(side);
+            Vec3 b2 = segmentB.add(side);
+
+            float u0 = 0.0F;
+            float u1 = (float) (segmentLength / TEXTURE_REPEAT_LENGTH);
+
+            addVertex(buffer, pose, a1, u0, 0.0F, packedLight);
+            addVertex(buffer, pose, a2, u0, 1.0F, packedLight);
+            addVertex(buffer, pose, b2, u1, 1.0F, packedLight);
+            addVertex(buffer, pose, b1, u1, 0.0F, packedLight);
+
+            distance += segmentLength;
+        }
     }
 
     private static void addVertex(
@@ -111,4 +145,3 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
         );
     }
 }
-
