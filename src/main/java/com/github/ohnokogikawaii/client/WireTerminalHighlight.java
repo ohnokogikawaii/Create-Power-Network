@@ -27,22 +27,6 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 )
 public final class WireTerminalHighlight {
 
-    /*
-     * TerminalBlock 内の3段の端子中心。
-     * Minecraft のブロック座標は 1 ブロック = 16 ピクセル。
-     */
-    private static final double[] TERMINAL_Y = {
-            1.5 / 16.0,
-            3.5 / 16.0,
-            5.5 / 16.0
-    };
-
-    /*
-     * 端子の周囲に表示する枠の大きさ。
-     */
-    private static final double HALF_SIZE_XZ = 3.5 / 16.0;
-    private static final double HALF_SIZE_Y = 1.5 / 16.0;
-
     private WireTerminalHighlight() {
     }
 
@@ -77,30 +61,8 @@ public final class WireTerminalHighlight {
             return;
         }
 
-        /*
-         * ヒット位置に最も近い端子を選択する。
-         * ブロック全体ではなく、3つの端子を個別に強調する。
-         */
-        Vec3 hitLocation = blockHit.getLocation();
-
-        int terminalIndex = findNearestTerminal(
-                blockPos,
-                hitLocation
-        );
-
-        double centerX = blockPos.getX() + 0.5;
-        double centerY = blockPos.getY()
-                + TERMINAL_Y[terminalIndex];
-        double centerZ = blockPos.getZ() + 0.5;
-
-        AABB box = new AABB(
-                centerX - HALF_SIZE_XZ,
-                centerY - HALF_SIZE_Y,
-                centerZ - HALF_SIZE_XZ,
-                centerX + HALF_SIZE_XZ,
-                centerY + HALF_SIZE_Y,
-                centerZ + HALF_SIZE_XZ
-        );
+        // One highlight box for the complete terminal collision shape.
+        AABB box = TerminalBlock.getHighlightBox(blockPos);
 
         renderOutline(event, box);
     }
@@ -111,27 +73,6 @@ public final class WireTerminalHighlight {
 
         return mainHand.getItem() instanceof WireItem
                 || offHand.getItem() instanceof WireItem;
-    }
-
-    private static int findNearestTerminal(
-            BlockPos blockPos,
-            Vec3 hitLocation
-    ) {
-        double localY = hitLocation.y - blockPos.getY();
-
-        int nearestIndex = 0;
-        double nearestDistance = Double.MAX_VALUE;
-
-        for (int i = 0; i < TERMINAL_Y.length; i++) {
-            double distance = Math.abs(localY - TERMINAL_Y[i]);
-
-            if (distance < nearestDistance) {
-                nearestDistance = distance;
-                nearestIndex = i;
-            }
-        }
-
-        return nearestIndex;
     }
 
     private static void renderOutline(
@@ -158,10 +99,6 @@ public final class WireTerminalHighlight {
         VertexConsumer consumer =
                 bufferSource.getBuffer(RenderType.lines());
 
-        /*
-         * 青色の枠。
-         * 接続先として照準が合っている端子を示す。
-         */
         LevelRenderer.renderLineBox(
                 poseStack,
                 consumer,

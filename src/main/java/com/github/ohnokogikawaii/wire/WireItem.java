@@ -2,7 +2,6 @@
 package com.github.ohnokogikawaii.wire;
 
 import com.github.ohnokogikawaii.PowerNetwork;
-import com.github.ohnokogikawaii.terminal.TerminalBlock;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -23,11 +22,10 @@ public class WireItem extends Item {
 
     private record EndpointSelection(
             BlockPos anchor,
-            Vec3 position,
-            int pointIndex
+            Vec3 position
     ) {}
 
-    private static final Map<UUID, BlockPos> FIRST_ENDPOINTS =
+    private static final Map<UUID, EndpointSelection> FIRST_ENDPOINTS =
             new ConcurrentHashMap<>();
 
     private final ResourceLocation wireTypeId;
@@ -54,7 +52,16 @@ public class WireItem extends Item {
         BlockPos clickedPos = context.getClickedPos().immutable();
 
         if (!(level.getBlockState(clickedPos).getBlock()
-                instanceof TerminalBlock)) {
+                instanceof WireConnectionPointProvider provider)) {
+            return InteractionResult.PASS;
+        }
+
+        Vec3 clickedPoint = provider.getNearestConnectionPoint(
+                clickedPos,
+                context.getClickLocation()
+        );
+
+        if (clickedPoint == null) {
             return InteractionResult.PASS;
         }
 
@@ -67,11 +74,17 @@ public class WireItem extends Item {
         }
 
         UUID playerId = context.getPlayer().getUUID();
-        BlockPos first = FIRST_ENDPOINTS.get(playerId);
 
-        // 1個目の端子を選択
+        EndpointSelection second = new EndpointSelection(
+                clickedPos,
+                clickedPoint
+        );
+
+        EndpointSelection first = FIRST_ENDPOINTS.get(playerId);
+
+        // Select the first connection point.
         if (first == null) {
-            FIRST_ENDPOINTS.put(playerId, clickedPos);
+            FIRST_ENDPOINTS.put(playerId, second);
 
             context.getPlayer().displayClientMessage(
                     Component.translatable(
@@ -83,8 +96,8 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // 同じ端子を2回選択することを禁止
-        if (first.equals(clickedPos)) {
+        // Do not connect a point to itself.
+        if (first.position().distanceToSqr(second.position()) < 1.0E-8) {
             context.getPlayer().displayClientMessage(
                     Component.translatable(
                             "message.powernetwork.wire.same_endpoint"
@@ -95,10 +108,10 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // 2個目の端子が選択されたので、選択状態を解除
+        // Clear the selection after the second endpoint is selected.
         FIRST_ENDPOINTS.remove(playerId);
 
-        double distance = Math.sqrt(first.distSqr(clickedPos));
+        double distance = first.position().distanceTo(second.position());
         WireType wireType = getWireType();
 
         if (distance < wireType.getMinimumLength()) {
@@ -123,16 +136,14 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // 端点間を覆う範囲を検索する。
-        // ワイヤーのEntityは端点間の中央に配置されているため、
-        // この範囲で既存の接続を検索できる。
+        // Search the area between the two anchor blocks.
         AABB searchArea = new AABB(
-                Math.min(first.getX(), clickedPos.getX()),
-                Math.min(first.getY(), clickedPos.getY()),
-                Math.min(first.getZ(), clickedPos.getZ()),
-                Math.max(first.getX(), clickedPos.getX()) + 1.0,
-                Math.max(first.getY(), clickedPos.getY()) + 1.0,
-                Math.max(first.getZ(), clickedPos.getZ()) + 1.0
+                Math.min(first.anchor().getX(), second.anchor().getX()),
+                Math.min(first.anchor().getY(), second.anchor().getY()),
+                Math.min(first.anchor().getZ(), second.anchor().getZ()),
+                Math.max(first.anchor().getX(), second.anchor().getX()) + 1.0,
+                Math.max(first.anchor().getY(), second.anchor().getY()) + 1.0,
+                Math.max(first.anchor().getZ(), second.anchor().getZ()) + 1.0
         ).inflate(1.0);
 
         for (WireEntity existing : level.getEntitiesOfClass(
@@ -140,13 +151,16 @@ public class WireItem extends Item {
                 searchArea,
                 Entity::isAlive
         )) {
+            Vec3 existingA = existing.getEndpointAWorldPosition();
+            Vec3 existingB = existing.getEndpointBWorldPosition();
+
             boolean sameDirection =
-                    existing.getEndpointA().equals(first)
-                            && existing.getEndpointB().equals(clickedPos);
+                    existingA.distanceToSqr(first.position()) < 1.0E-8
+                            && existingB.distanceToSqr(second.position()) < 1.0E-8;
 
             boolean reverseDirection =
-                    existing.getEndpointA().equals(clickedPos)
-                            && existing.getEndpointB().equals(first);
+                    existingA.distanceToSqr(second.position()) < 1.0E-8
+                            && existingB.distanceToSqr(first.position()) < 1.0E-8;
 
             if (sameDirection || reverseDirection) {
                 context.getPlayer().displayClientMessage(
@@ -160,11 +174,15 @@ public class WireItem extends Item {
             }
         }
 
-        // 重複がなければワイヤーを生成
+        // Create the wire using the exact connection point positions.
         WireEntity wire = new WireEntity(
                 level,
-                first,
-                clickedPos,
+                first.position(),
+                second.position(),
+                first.anchor(),
+                second.anchor(),
+                false,
+                false,
                 wireTypeId
         );
 
@@ -187,10 +205,12 @@ public class WireItem extends Item {
         );
 
         PowerNetwork.LOGGER.debug(
-                "Created {} wire between {} and {} (distance {} blocks)",
+                "Created {} wire between {} at {} and {} at {} (distance {} blocks)",
                 wireTypeId,
-                first,
-                clickedPos,
+                first.anchor(),
+                first.position(),
+                second.anchor(),
+                second.position(),
                 distance
         );
 
