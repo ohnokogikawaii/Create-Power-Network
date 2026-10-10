@@ -1,3 +1,4 @@
+
 package com.github.ohnokogikawaii.wire;
 
 import com.github.ohnokogikawaii.registry.ModEntities;
@@ -7,6 +8,7 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.Level;
@@ -14,86 +16,52 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 
+import java.util.UUID;
+
 public class WireEntity extends Entity {
 
     private static final EntityDataAccessor<BlockPos> ENDPOINT_A =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.BLOCK_POS
-            );
-
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.BLOCK_POS);
     private static final EntityDataAccessor<BlockPos> ENDPOINT_B =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.BLOCK_POS
-            );
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.BLOCK_POS);
 
     private static final EntityDataAccessor<Float> ENDPOINT_A_X =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.FLOAT
-            );
-
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> ENDPOINT_A_Y =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.FLOAT
-            );
-
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> ENDPOINT_A_Z =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.FLOAT
-            );
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.FLOAT);
 
     private static final EntityDataAccessor<Float> ENDPOINT_B_X =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.FLOAT
-            );
-
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> ENDPOINT_B_Y =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.FLOAT
-            );
-
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> ENDPOINT_B_Z =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.FLOAT
-            );
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.FLOAT);
 
     private static final EntityDataAccessor<Boolean> FREE_ENDPOINT_A =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.BOOLEAN
-            );
-
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Boolean> FREE_ENDPOINT_B =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.BOOLEAN
-            );
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.BOOLEAN);
 
     private static final EntityDataAccessor<String> WIRE_TYPE =
-            SynchedEntityData.defineId(
-                    WireEntity.class,
-                    EntityDataSerializers.STRING
-            );
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.STRING);
 
-    public WireEntity(
-            EntityType<? extends WireEntity> entityType,
-            Level level
-    ) {
+    // クライアント側で追従対象を取得するための Entity ID。
+    private static final EntityDataAccessor<Integer> BRANCH_A_ID =
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> BRANCH_B_ID =
+            SynchedEntityData.defineId(WireEntity.class, EntityDataSerializers.INT);
+
+    // 保存・再読み込みに使用する UUID。
+    private UUID branchAUuid;
+    private UUID branchBUuid;
+
+    public WireEntity(EntityType<? extends WireEntity> entityType, Level level) {
         super(entityType, level);
-        this.noPhysics = true;
+        noPhysics = true;
     }
 
-    /**
-     * 従来のブロック端子同士を接続するコンストラクタ。
-     * 既存の WireItem との互換性を維持する。
-     */
     public WireEntity(
             Level level,
             BlockPos endpointA,
@@ -101,18 +69,11 @@ public class WireEntity extends Entity {
             ResourceLocation wireTypeId
     ) {
         this(ModEntities.WIRE.get(), level);
-
         setEndpoints(endpointA, endpointB);
         setWireTypeId(wireTypeId);
         updatePosition();
     }
 
-    /**
-     * 正確なワールド座標を使うコンストラクタ。
-     *
-     * freeEndpoint が false の端点は通常のブロック端子として検証する。
-     * true の端点は分岐コネクタなどの自由座標端点として扱う。
-     */
     public WireEntity(
             Level level,
             Vec3 endpointA,
@@ -139,9 +100,7 @@ public class WireEntity extends Entity {
     }
 
     @Override
-    protected void defineSynchedData(
-            SynchedEntityData.Builder builder
-    ) {
+    protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(ENDPOINT_A, BlockPos.ZERO);
         builder.define(ENDPOINT_B, BlockPos.ZERO);
 
@@ -155,8 +114,10 @@ public class WireEntity extends Entity {
 
         builder.define(FREE_ENDPOINT_A, false);
         builder.define(FREE_ENDPOINT_B, false);
-
         builder.define(WIRE_TYPE, "powernetwork:copper");
+
+        builder.define(BRANCH_A_ID, -1);
+        builder.define(BRANCH_B_ID, -1);
     }
 
     public BlockPos getEndpointA() {
@@ -175,19 +136,17 @@ public class WireEntity extends Entity {
         return entityData.get(FREE_ENDPOINT_B);
     }
 
-    /**
-     * 従来のブロック端子接続。
-     * 端点はブロックの中心に設定する。
-     */
-    public void setEndpoints(
-            BlockPos endpointA,
-            BlockPos endpointB
-    ) {
+    public void setEndpoints(BlockPos endpointA, BlockPos endpointB) {
         entityData.set(ENDPOINT_A, endpointA.immutable());
         entityData.set(ENDPOINT_B, endpointB.immutable());
 
         entityData.set(FREE_ENDPOINT_A, false);
         entityData.set(FREE_ENDPOINT_B, false);
+
+        branchAUuid = null;
+        branchBUuid = null;
+        entityData.set(BRANCH_A_ID, -1);
+        entityData.set(BRANCH_B_ID, -1);
 
         setExactEndpointA(Vec3.atCenterOf(endpointA).toVector3f());
         setExactEndpointB(Vec3.atCenterOf(endpointB).toVector3f());
@@ -221,18 +180,13 @@ public class WireEntity extends Entity {
         );
     }
 
-    /**
-     * 既存コードとの互換性を維持する。
-     */
     public Vec3 getEndpointWorldPosition(BlockPos endpoint) {
         if (endpoint.equals(getEndpointA())) {
             return getEndpointAWorldPosition();
         }
-
         if (endpoint.equals(getEndpointB())) {
             return getEndpointBWorldPosition();
         }
-
         return Vec3.atCenterOf(endpoint);
     }
 
@@ -245,34 +199,89 @@ public class WireEntity extends Entity {
     }
 
     public ResourceLocation getWireTypeId() {
-        return ResourceLocation.parse(
-                entityData.get(WIRE_TYPE)
-        );
+        return ResourceLocation.parse(entityData.get(WIRE_TYPE));
     }
 
     public void setWireTypeId(ResourceLocation wireTypeId) {
-        entityData.set(
-                WIRE_TYPE,
-                wireTypeId.toString()
-        );
+        entityData.set(WIRE_TYPE, wireTypeId.toString());
     }
 
     public WireType getWireType() {
         return WireTypeManager.get(getWireTypeId());
     }
 
-    private void updatePosition() {
-        Vec3 a = getEndpointAWorldPosition();
-        Vec3 b = getEndpointBWorldPosition();
+    /**
+     * 端点 A を分岐コネクタの接続点 C に接続する。
+     */
+    public void attachEndpointAToBranch(WireBranchConnectorEntity branch) {
+        branchAUuid = branch.getUUID();
+        entityData.set(BRANCH_A_ID, branch.getId());
+        entityData.set(FREE_ENDPOINT_A, true);
+        setExactEndpointA(branch.getBranchPortWorldPosition().toVector3f());
+    }
 
-        Vec3 center = a.add(b).scale(0.5);
+    /**
+     * 端点 B を分岐コネクタの接続点 C に接続する。
+     */
+    public void attachEndpointBToBranch(WireBranchConnectorEntity branch) {
+        branchBUuid = branch.getUUID();
+        entityData.set(BRANCH_B_ID, branch.getId());
+        entityData.set(FREE_ENDPOINT_B, true);
+        setExactEndpointB(branch.getBranchPortWorldPosition().toVector3f());
+    }
 
-        setPos(center.x, center.y, center.z);
+    public UUID getBranchAUuid() {
+        return branchAUuid;
+    }
+
+    public UUID getBranchBUuid() {
+        return branchBUuid;
+    }
+
+    private WireBranchConnectorEntity getBranch(boolean endpointA) {
+        if (level().isClientSide) {
+            int id = entityData.get(endpointA ? BRANCH_A_ID : BRANCH_B_ID);
+            Entity entity = id < 0 ? null : level().getEntity(id);
+            return entity instanceof WireBranchConnectorEntity branch ? branch : null;
+        }
+
+        UUID uuid = endpointA ? branchAUuid : branchBUuid;
+        if (uuid == null || !(level() instanceof ServerLevel serverLevel)) {
+            return null;
+        }
+
+        Entity entity = serverLevel.getEntity(uuid);
+        return entity instanceof WireBranchConnectorEntity branch ? branch : null;
     }
 
     private boolean isValidAnchor(BlockPos pos) {
+        // ブロックがまだロードされていない場合も false になるため、
+        // チャンク未ロード判定は tick 側で先に行う。
         return level().getBlockState(pos).getBlock()
                 instanceof WireConnectionPointProvider;
+    }
+
+    private void updateAttachedEndpoints() {
+        WireBranchConnectorEntity branchA = getBranch(true);
+        if (branchA != null && branchA.isAlive()) {
+            setExactEndpointA(
+                    branchA.getBranchPortWorldPosition().toVector3f()
+            );
+        }
+
+        WireBranchConnectorEntity branchB = getBranch(false);
+        if (branchB != null && branchB.isAlive()) {
+            setExactEndpointB(
+                    branchB.getBranchPortWorldPosition().toVector3f()
+            );
+        }
+    }
+
+    private void updatePosition() {
+        Vec3 a = getEndpointAWorldPosition();
+        Vec3 b = getEndpointBWorldPosition();
+        Vec3 center = a.add(b).scale(0.5);
+        setPos(center.x, center.y, center.z);
     }
 
     @Override
@@ -280,19 +289,27 @@ public class WireEntity extends Entity {
         super.tick();
 
         if (!level().isClientSide) {
-            if (!isEndpointAFree()
-                    && !isValidAnchor(getEndpointA())) {
-                discard();
-                return;
+            // 接続先が分岐コネクタなら、ブロック端子として検証しない。
+            if (branchAUuid == null && !isEndpointAFree()) {
+                BlockPos pos = getEndpointA();
+                if (level().hasChunkAt(pos) && !isValidAnchor(pos)) {
+                    discard();
+                    return;
+                }
             }
 
-            if (!isEndpointBFree()
-                    && !isValidAnchor(getEndpointB())) {
-                discard();
-                return;
+            if (branchBUuid == null && !isEndpointBFree()) {
+                BlockPos pos = getEndpointB();
+                if (level().hasChunkAt(pos) && !isValidAnchor(pos)) {
+                    discard();
+                    return;
+                }
             }
         }
 
+        // 分岐コネクタが一時的に見つからなくても、
+        // 最後に保存された座標は維持する。
+        updateAttachedEndpoints();
         updatePosition();
     }
 
@@ -314,8 +331,14 @@ public class WireEntity extends Entity {
 
         tag.putBoolean("FreeEndpointA", isEndpointAFree());
         tag.putBoolean("FreeEndpointB", isEndpointBFree());
-
         tag.putString("WireType", getWireTypeId().toString());
+
+        if (branchAUuid != null) {
+            tag.putUUID("BranchA", branchAUuid);
+        }
+        if (branchBUuid != null) {
+            tag.putUUID("BranchB", branchBUuid);
+        }
     }
 
     @Override
@@ -326,8 +349,6 @@ public class WireEntity extends Entity {
         entityData.set(ENDPOINT_A, a);
         entityData.set(ENDPOINT_B, b);
 
-        // 古いセーブデータでは座標が保存されていないため、
-        // 従来どおりブロック中心を使用する。
         if (tag.contains("EndpointAX")) {
             setExactEndpointA(new Vec3(
                     tag.getDouble("EndpointAX"),
@@ -345,15 +366,15 @@ public class WireEntity extends Entity {
             setExactEndpointB(Vec3.atCenterOf(b).toVector3f());
         }
 
-        entityData.set(
-                FREE_ENDPOINT_A,
-                tag.getBoolean("FreeEndpointA")
-        );
+        entityData.set(FREE_ENDPOINT_A, tag.getBoolean("FreeEndpointA"));
+        entityData.set(FREE_ENDPOINT_B, tag.getBoolean("FreeEndpointB"));
 
-        entityData.set(
-                FREE_ENDPOINT_B,
-                tag.getBoolean("FreeEndpointB")
-        );
+        branchAUuid = tag.hasUUID("BranchA") ? tag.getUUID("BranchA") : null;
+        branchBUuid = tag.hasUUID("BranchB") ? tag.getUUID("BranchB") : null;
+
+        // Entity ID はセーブデータから復元せず、追従対象を再取得する。
+        entityData.set(BRANCH_A_ID, -1);
+        entityData.set(BRANCH_B_ID, -1);
 
         String wireType = tag.getString("WireType");
         if (!wireType.isBlank()) {
@@ -373,10 +394,7 @@ public class WireEntity extends Entity {
 
     @Override
     public boolean shouldRenderAtSqrDistance(double distance) {
-        double size = getBoundingBoxForCulling().getSize();
-        size = Math.max(size, 1.0);
-
+        double size = Math.max(getBoundingBoxForCulling().getSize(), 1.0);
         return distance < size * size * 64.0;
     }
 }
-
