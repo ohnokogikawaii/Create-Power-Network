@@ -2,7 +2,7 @@
 package com.github.ohnokogikawaii.client;
 
 import com.github.ohnokogikawaii.PowerNetwork;
-import com.github.ohnokogikawaii.wire.TerminalBlock;
+import com.github.ohnokogikawaii.terminal.TerminalBlock;
 import com.github.ohnokogikawaii.wire.WireItem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -166,9 +166,9 @@ public final class WireTerminalHighlight {
                 poseStack,
                 consumer,
                 worldBox,
-                0.25F,
-                0.85F,
-                1.0F,
+                0.65F,
+                0.65F,
+                0.65F,
                 1.0F
         );
 

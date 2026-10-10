@@ -2,6 +2,7 @@
 package com.github.ohnokogikawaii.wire;
 
 import com.github.ohnokogikawaii.PowerNetwork;
+import com.github.ohnokogikawaii.terminal.TerminalBlock;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -12,12 +13,19 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class WireItem extends Item {
+
+    private record EndpointSelection(
+            BlockPos anchor,
+            Vec3 position,
+            int pointIndex
+    ) {}
 
     private static final Map<UUID, BlockPos> FIRST_ENDPOINTS =
             new ConcurrentHashMap<>();

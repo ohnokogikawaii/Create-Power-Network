@@ -1,5 +1,5 @@
 
-package com.github.ohnokogikawaii.wire;
+package com.github.ohnokogikawaii.terminal;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockGetter;

@@ -1,7 +1,7 @@
 package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
-import com.github.ohnokogikawaii.wire.TerminalBlock;
+import com.github.ohnokogikawaii.terminal.TerminalBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
 import net.neoforged.bus.api.IEventBus;

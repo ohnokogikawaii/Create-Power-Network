@@ -272,7 +272,7 @@ public class WireEntity extends Entity {
 
     private boolean isValidAnchor(BlockPos pos) {
         return level().getBlockState(pos).getBlock()
-                instanceof TerminalBlock;
+                instanceof WireConnectionPointProvider;
     }
 
     @Override
