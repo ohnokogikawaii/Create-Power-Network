@@ -1,7 +1,7 @@
-
 package com.github.ohnokogikawaii.hub_connector;
 
 import com.github.ohnokogikawaii.wire.WireConnectionPointProvider;
+import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -22,6 +22,9 @@ import java.util.List;
 public class HubConnectorBlock extends HorizontalDirectionalBlock
         implements WireConnectionPointProvider {
 
+    public static final MapCodec<HubConnectorBlock> CODEC =
+            simpleCodec(HubConnectorBlock::new);
+
     private static final VoxelShape BASE_SHAPE = Shapes.or(
             // 中央の接続本体
             Block.box(5, 5, 5, 11, 11, 11),
@@ -37,23 +40,18 @@ public class HubConnectorBlock extends HorizontalDirectionalBlock
     );
 
     private static final List<ConnectionPoint> BASE_POINTS = List.of(
-            // 左側
             WireConnectionPointProvider.connectionPoint(
                     "left",
                     0.5 / 16.0,
                     0.5,
                     0.5
             ),
-
-            // 右側
             WireConnectionPointProvider.connectionPoint(
                     "right",
                     15.5 / 16.0,
                     0.5,
                     0.5
             ),
-
-            // 分岐側
             WireConnectionPointProvider.connectionPoint(
                     "branch",
                     0.5,
@@ -64,9 +62,15 @@ public class HubConnectorBlock extends HorizontalDirectionalBlock
 
     public HubConnectorBlock(Properties properties) {
         super(properties);
+
         registerDefaultState(
                 stateDefinition.any().setValue(FACING, Direction.NORTH)
         );
+    }
+
+    @Override
+    public MapCodec<HubConnectorBlock> codec() {
+        return CODEC;
     }
 
     @Override
@@ -212,3 +216,4 @@ public class HubConnectorBlock extends HorizontalDirectionalBlock
         return getShape(state, level, pos, context);
     }
 }
+

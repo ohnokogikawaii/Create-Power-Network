@@ -1,7 +1,7 @@
-
 package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
+import com.github.ohnokogikawaii.wire.WireBranchConnectorItem;
 import com.github.ohnokogikawaii.wire.WireItem;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.BlockItem;
@@ -39,6 +39,26 @@ public final class ModItems {
                     "powernetwork:copper"
             );
 
+    public static final DeferredItem<WireBranchConnectorItem>
+            WIRE_BRANCH_CONNECTOR_DOWN =
+            ITEMS.register(
+                    "wire_branch_connector_down",
+                    () -> new WireBranchConnectorItem(
+                            new Item.Properties(),
+                            true
+                    )
+            );
+
+    public static final DeferredItem<WireBranchConnectorItem>
+            WIRE_BRANCH_CONNECTOR_ANGLED =
+            ITEMS.register(
+                    "wire_branch_connector_angled",
+                    () -> new WireBranchConnectorItem(
+                            new Item.Properties(),
+                            false
+                    )
+            );
+
     private ModItems() {
     }
 
@@ -59,3 +79,4 @@ public final class ModItems {
         ITEMS.register(modEventBus);
     }
 }
+

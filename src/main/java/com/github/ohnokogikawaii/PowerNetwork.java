@@ -36,6 +36,8 @@ public class PowerNetwork {
                                 output.accept(ModItems.TERMINAL.get());
                                 output.accept(ModItems.HUB_CONNECTOR.get());
                                 output.accept(ModItems.COPPER_WIRE.get());
+                                output.accept(ModItems.WIRE_BRANCH_CONNECTOR_DOWN.get());
+                                output.accept(ModItems.WIRE_BRANCH_CONNECTOR_ANGLED.get());
                             })
                             .build()
             );

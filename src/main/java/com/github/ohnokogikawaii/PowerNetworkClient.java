@@ -1,5 +1,7 @@
+
 package com.github.ohnokogikawaii;
 
+import com.github.ohnokogikawaii.client.WireBranchConnectorRenderer;
 import com.github.ohnokogikawaii.client.WireEntityRenderer;
 import com.github.ohnokogikawaii.registry.ModEntities;
 import net.neoforged.api.distmarker.Dist;
@@ -19,11 +21,16 @@ public final class PowerNetworkClient {
 
     @SubscribeEvent
     public static void registerEntityRenderers(
-            EntityRenderersEvent.RegisterRenderers event) {
-
+            EntityRenderersEvent.RegisterRenderers event
+    ) {
         event.registerEntityRenderer(
                 ModEntities.WIRE.get(),
                 WireEntityRenderer::new
+        );
+
+        event.registerEntityRenderer(
+                ModEntities.WIRE_BRANCH_CONNECTOR.get(),
+                WireBranchConnectorRenderer::new
         );
     }
 }
