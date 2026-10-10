@@ -1,3 +1,4 @@
+
 package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
@@ -12,9 +13,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 public final class ModItems {
 
     public static final DeferredRegister.Items ITEMS =
-            DeferredRegister.createItems(
-                    PowerNetwork.MODID
-            );
+            DeferredRegister.createItems(PowerNetwork.MODID);
 
     public static final DeferredItem<BlockItem> TERMINAL =
             ITEMS.register(
@@ -25,12 +24,15 @@ public final class ModItems {
                     )
             );
 
-    /**
-     * Copper wire.
-     *
-     * The physical/electrical properties are defined by:
-     * data/powernetwork/wire_types/copper.json
-     */
+    public static final DeferredItem<BlockItem> HUB_CONNECTOR =
+            ITEMS.register(
+                    "hub_connector",
+                    () -> new BlockItem(
+                            ModBlocks.HUB_CONNECTOR.get(),
+                            new Item.Properties()
+                    )
+            );
+
     public static final DeferredItem<WireItem> COPPER_WIRE =
             registerWire(
                     "copper_wire",
@@ -47,18 +49,13 @@ public final class ModItems {
         return ITEMS.register(
                 itemId,
                 () -> new WireItem(
-                        new Item.Properties()
-                                .stacksTo(64),
+                        new Item.Properties().stacksTo(64),
                         ResourceLocation.parse(wireTypeId)
                 )
         );
     }
 
-
-
-    public static void register(
-            IEventBus modEventBus
-    ) {
+    public static void register(IEventBus modEventBus) {
         ITEMS.register(modEventBus);
     }
 }

@@ -3,26 +3,14 @@ package com.github.ohnokogikawaii.wire;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 
-/**
- * Implemented by blocks that expose one or more wire connection points.
- *
- * Connection positions and highlight bounds are defined once by the block
- * and reused by wire placement and client highlighting.
- */
 public interface WireConnectionPointProvider {
 
-    /**
-     * A connection point in block-local coordinates.
-     *
-     * @param id stable identifier for this point within the block
-     * @param position local connection position, usually within 0.0..1.0
-     * @param highlightHalfSize half-size of the highlight box on each axis
-     */
     record ConnectionPoint(
             String id,
             Vec3 position,
@@ -64,10 +52,6 @@ public interface WireConnectionPointProvider {
         }
     }
 
-    /**
-     * Factory for a standard terminal connection point.
-     * The block only needs to specify its ID and local position.
-     */
     static ConnectionPoint connectionPoint(
             String id,
             double x,
@@ -85,18 +69,33 @@ public interface WireConnectionPointProvider {
         );
     }
 
-    /**
-     * Define all wire connection points in block-local coordinates.
-     */
     List<ConnectionPoint> getConnectionPoints();
 
     /**
-     * Find the nearest defined connection point to a world-space hit.
-     * Returns null if the block defines no points.
+     * 向きを必要とするブロックは、このメソッドを実装する。
+     * 従来の端子は従来どおりの接続点を返す。
      */
+    default List<ConnectionPoint> getConnectionPoints(
+            BlockState state
+    ) {
+        return getConnectionPoints();
+    }
+
     default ConnectionPoint getNearestConnectionPoint(
             BlockPos pos,
             Vec3 hitLocation
+    ) {
+        return getNearestConnectionPoint(
+                pos,
+                hitLocation,
+                null
+        );
+    }
+
+    default ConnectionPoint getNearestConnectionPoint(
+            BlockPos pos,
+            Vec3 hitLocation,
+            BlockState state
     ) {
         Vec3 localHit = hitLocation.subtract(
                 pos.getX(),
@@ -107,7 +106,11 @@ public interface WireConnectionPointProvider {
         ConnectionPoint nearest = null;
         double nearestDistance = Double.MAX_VALUE;
 
-        for (ConnectionPoint point : getConnectionPoints()) {
+        List<ConnectionPoint> points = state == null
+                ? getConnectionPoints()
+                : getConnectionPoints(state);
+
+        for (ConnectionPoint point : points) {
             double distance =
                     point.position().distanceToSqr(localHit);
 

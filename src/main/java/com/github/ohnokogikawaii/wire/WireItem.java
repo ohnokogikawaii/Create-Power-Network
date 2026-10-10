@@ -1,3 +1,4 @@
+
 package com.github.ohnokogikawaii.wire;
 
 import com.github.ohnokogikawaii.PowerNetwork;
@@ -55,10 +56,13 @@ public class WireItem extends Item {
             return InteractionResult.PASS;
         }
 
+        var state = level.getBlockState(clickedPos);
+
         WireConnectionPointProvider.ConnectionPoint connectionPoint =
                 provider.getNearestConnectionPoint(
                         clickedPos,
-                        context.getClickLocation()
+                        context.getClickLocation(),
+                        state
                 );
 
         if (connectionPoint == null) {

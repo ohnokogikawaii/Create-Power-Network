@@ -1,3 +1,4 @@
+
 package com.github.ohnokogikawaii;
 
 import com.github.ohnokogikawaii.registry.ModBlocks;
@@ -19,7 +20,6 @@ import org.slf4j.Logger;
 public class PowerNetwork {
 
     public static final String MODID = "powernetwork";
-
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS =
@@ -34,13 +34,13 @@ public class PowerNetwork {
                             .icon(() -> ModItems.COPPER_WIRE.get().getDefaultInstance())
                             .displayItems((parameters, output) -> {
                                 output.accept(ModItems.TERMINAL.get());
+                                output.accept(ModItems.HUB_CONNECTOR.get());
                                 output.accept(ModItems.COPPER_WIRE.get());
                             })
                             .build()
             );
 
     public PowerNetwork(IEventBus modEventBus, ModContainer modContainer) {
-
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
         ModEntities.register(modEventBus);

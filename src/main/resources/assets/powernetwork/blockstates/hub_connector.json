@@ -1,0 +1,20 @@
+
+{
+  "variants": {
+    "facing=north": {
+      "model": "powernetwork:block/connector/hub_connector"
+    },
+    "facing=east": {
+      "model": "powernetwork:block/connector/hub_connector",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "powernetwork:block/connector/hub_connector",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "powernetwork:block/connector/hub_connector",
+      "y": 270
+    }
+  }
+}

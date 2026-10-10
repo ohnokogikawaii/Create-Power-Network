@@ -1,6 +1,8 @@
+
 package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
+import com.github.ohnokogikawaii.hub_connector.HubConnectorBlock;
 import com.github.ohnokogikawaii.terminal.TerminalBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -17,6 +19,16 @@ public final class ModBlocks {
             BLOCKS.registerBlock(
                     "terminal",
                     TerminalBlock::new,
+                    BlockBehaviour.Properties.of()
+                            .mapColor(MapColor.METAL)
+                            .strength(2.0F, 6.0F)
+                            .requiresCorrectToolForDrops()
+            );
+
+    public static final DeferredBlock<HubConnectorBlock> HUB_CONNECTOR =
+            BLOCKS.registerBlock(
+                    "hub_connector",
+                    HubConnectorBlock::new,
                     BlockBehaviour.Properties.of()
                             .mapColor(MapColor.METAL)
                             .strength(2.0F, 6.0F)

@@ -2,7 +2,9 @@
 package com.github.ohnokogikawaii.client;
 
 import com.github.ohnokogikawaii.PowerNetwork;
+import com.github.ohnokogikawaii.hub_connector.HubConnectorBlock;
 import com.github.ohnokogikawaii.terminal.TerminalBlock;
+import com.github.ohnokogikawaii.wire.WireConnectionPointProvider;
 import com.github.ohnokogikawaii.wire.WireItem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -12,6 +14,7 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -55,16 +58,42 @@ public final class WireTerminalHighlight {
         }
 
         BlockPos blockPos = blockHit.getBlockPos();
+        BlockState state = minecraft.level.getBlockState(blockPos);
 
-        if (!(minecraft.level.getBlockState(blockPos).getBlock()
-                instanceof TerminalBlock)) {
+        if (state.getBlock() instanceof TerminalBlock) {
+            renderOutline(
+                    event,
+                    TerminalBlock.getHighlightBox(blockPos),
+                    0.65F,
+                    0.65F,
+                    0.65F
+            );
             return;
         }
 
-        // One highlight box for the complete terminal collision shape.
-        AABB box = TerminalBlock.getHighlightBox(blockPos);
+        if (!(state.getBlock() instanceof HubConnectorBlock)
+                || !(state.getBlock() instanceof WireConnectionPointProvider provider)) {
+            return;
+        }
 
-        renderOutline(event, box);
+        WireConnectionPointProvider.ConnectionPoint point =
+                provider.getNearestConnectionPoint(
+                        blockPos,
+                        blockHit.getLocation(),
+                        state
+                );
+
+        if (point == null) {
+            return;
+        }
+
+        renderOutline(
+                event,
+                point.createWorldHighlightBox(blockPos),
+                0.65F,
+                0.65F,
+                0.65F
+        );
     }
 
     private static boolean isHoldingWire(Minecraft minecraft) {
@@ -77,7 +106,10 @@ public final class WireTerminalHighlight {
 
     private static void renderOutline(
             RenderLevelStageEvent event,
-            AABB worldBox
+            AABB worldBox,
+            float red,
+            float green,
+            float blue
     ) {
         Minecraft minecraft = Minecraft.getInstance();
 
@@ -103,9 +135,9 @@ public final class WireTerminalHighlight {
                 poseStack,
                 consumer,
                 worldBox,
-                0.65F,
-                0.65F,
-                0.65F,
+                red,
+                green,
+                blue,
                 1.0F
         );
 
