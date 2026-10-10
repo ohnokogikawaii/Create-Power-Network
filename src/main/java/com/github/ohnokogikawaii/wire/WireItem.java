@@ -1,4 +1,3 @@
-
 package com.github.ohnokogikawaii.wire;
 
 import com.github.ohnokogikawaii.PowerNetwork;
@@ -56,14 +55,17 @@ public class WireItem extends Item {
             return InteractionResult.PASS;
         }
 
-        Vec3 clickedPoint = provider.getNearestConnectionPoint(
-                clickedPos,
-                context.getClickLocation()
-        );
+        WireConnectionPointProvider.ConnectionPoint connectionPoint =
+                provider.getNearestConnectionPoint(
+                        clickedPos,
+                        context.getClickLocation()
+                );
 
-        if (clickedPoint == null) {
+        if (connectionPoint == null) {
             return InteractionResult.PASS;
         }
+
+        Vec3 clickedPoint = connectionPoint.worldPosition(clickedPos);
 
         if (level.isClientSide) {
             return InteractionResult.SUCCESS;
@@ -82,7 +84,6 @@ public class WireItem extends Item {
 
         EndpointSelection first = FIRST_ENDPOINTS.get(playerId);
 
-        // Select the first connection point.
         if (first == null) {
             FIRST_ENDPOINTS.put(playerId, second);
 
@@ -96,7 +97,6 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // Do not connect a point to itself.
         if (first.position().distanceToSqr(second.position()) < 1.0E-8) {
             context.getPlayer().displayClientMessage(
                     Component.translatable(
@@ -108,7 +108,6 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // Clear the selection after the second endpoint is selected.
         FIRST_ENDPOINTS.remove(playerId);
 
         double distance = first.position().distanceTo(second.position());
@@ -136,7 +135,6 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // Search the area between the two anchor blocks.
         AABB searchArea = new AABB(
                 Math.min(first.anchor().getX(), second.anchor().getX()),
                 Math.min(first.anchor().getY(), second.anchor().getY()),
@@ -174,7 +172,6 @@ public class WireItem extends Item {
             }
         }
 
-        // Create the wire using the exact connection point positions.
         WireEntity wire = new WireEntity(
                 level,
                 first.position(),
