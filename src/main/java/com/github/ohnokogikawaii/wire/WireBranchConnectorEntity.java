@@ -1,4 +1,3 @@
-
 package com.github.ohnokogikawaii.wire;
 
 import net.minecraft.nbt.CompoundTag;
@@ -12,24 +11,9 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Optional;
 import java.util.UUID;
 
-/**
- * 電線の途中に取り付ける分岐コネクタ。
- *
- * DOWN:
- *   端子 C を真下に配置する。
- *
- * ANGLED:
- *   電線の軸を基準に、端子 C の方向を8方向から選択する。
- *
- * この Entity 自体は電気回路を構築しない。
- * 親電線 A-B と端子 C の電気的な接続は、
- * 電気ネットワーク実装時に別途処理する。
- */
 public class WireBranchConnectorEntity extends Entity {
-
     private static final EntityDataAccessor<Integer> DATA_PARENT_ID =
             SynchedEntityData.defineId(
                     WireBranchConnectorEntity.class,
@@ -55,50 +39,33 @@ public class WireBranchConnectorEntity extends Entity {
             );
 
     private static final double PORT_OFFSET = 0.45;
-    private static final double PICK_RADIUS = 0.18;
+    private static final double CULL_RADIUS = 0.65;
 
-    /**
-     * 親電線の UUID。
-     * Entity ID は再起動後に変わるため、保存用には UUID を使用する。
-     */
     private UUID parentWireUuid;
 
     public WireBranchConnectorEntity(
-            EntityType<? extends WireBranchConnectorEntity> entityType,
+            EntityType<? extends WireBranchConnectorEntity> type,
             Level level
     ) {
-        super(entityType, level);
-
-        this.noPhysics = true;
-        this.setNoGravity(true);
+        super(type, level);
+        noPhysics = true;
+        setNoGravity(true);
     }
 
-    /**
-     * 新規設置時のコンストラクタ。
-     *
-     * wireT:
-     *   0.0 = 電線 A 側
-     *   0.5 = 電線の中央
-     *   1.0 = 電線 B 側
-     *
-     * directionIndex:
-     *   斜め型で使用する方向番号 0～7
-     */
     public WireBranchConnectorEntity(
-            EntityType<? extends WireBranchConnectorEntity> entityType,
+            EntityType<? extends WireBranchConnectorEntity> type,
             Level level,
             WireEntity parentWire,
             double wireT,
             boolean downType,
             int directionIndex
     ) {
-        this(entityType, level);
+        this(type, level);
 
         setParentWire(parentWire);
         setWireT(wireT);
         setDownType(downType);
         setDirectionIndex(directionIndex);
-
         updatePositionFromParent();
     }
 
@@ -112,9 +79,6 @@ public class WireBranchConnectorEntity extends Entity {
         builder.define(DATA_DOWN_TYPE, true);
     }
 
-    /**
-     * 親電線を設定する。
-     */
     public void setParentWire(WireEntity wire) {
         if (wire == null) {
             parentWireUuid = null;
@@ -164,43 +128,27 @@ public class WireBranchConnectorEntity extends Entity {
         return entityData.get(DATA_DOWN_TYPE);
     }
 
-    /**
-     * 親電線を取得する。
-     *
-     * サーバー側では UUID、クライアント側では同期された
-     * Entity ID を利用する。
-     */
     public WireEntity getParentWire() {
         if (level().isClientSide()) {
             Entity entity = level().getEntity(getParentWireId());
 
-            if (entity instanceof WireEntity wire) {
-                return wire;
-            }
-
-            return null;
+            return entity instanceof WireEntity wire ? wire : null;
         }
 
-        if (!(level() instanceof ServerLevel serverLevel)) {
-            return null;
-        }
-
-        if (parentWireUuid == null) {
+        if (!(level() instanceof ServerLevel serverLevel)
+                || parentWireUuid == null) {
             return null;
         }
 
         Entity entity = serverLevel.getEntity(parentWireUuid);
-
-        if (entity instanceof WireEntity wire) {
-            return wire;
-        }
-
-        return null;
+        return entity instanceof WireEntity wire ? wire : null;
     }
 
-    /**
-     * 端子 C のワールド座標を取得する。
-     */
+    private boolean parentCanSag(WireEntity parent) {
+        return parent.getWireType() != null
+                && parent.getWireType().canSag();
+    }
+
     public Vec3 getBranchPortWorldPosition() {
         WireEntity parent = getParentWire();
 
@@ -210,28 +158,20 @@ public class WireBranchConnectorEntity extends Entity {
 
         Vec3 a = parent.getEndpointAWorldPosition();
         Vec3 b = parent.getEndpointBWorldPosition();
+        boolean canSag = parentCanSag(parent);
 
         if (isDownType()) {
             return WireBranchGeometry.downwardPortPosition(
-                    a,
-                    b,
-                    getWireT(),
-                    PORT_OFFSET
+                    a, b, getWireT(), canSag, PORT_OFFSET
             );
         }
 
         return WireBranchGeometry.branchPortPosition(
-                a,
-                b,
-                getWireT(),
-                getDirectionIndex(),
-                PORT_OFFSET
+                a, b, getWireT(), canSag,
+                getDirectionIndex(), PORT_OFFSET
         );
     }
 
-    /**
-     * コネクタ本体の位置を親電線に追従させる。
-     */
     private void updatePositionFromParent() {
         WireEntity parent = getParentWire();
 
@@ -239,13 +179,11 @@ public class WireBranchConnectorEntity extends Entity {
             return;
         }
 
-        Vec3 a = parent.getEndpointAWorldPosition();
-        Vec3 b = parent.getEndpointBWorldPosition();
-
         Vec3 center = WireBranchGeometry.pointOnWire(
-                a,
-                b,
-                getWireT()
+                parent.getEndpointAWorldPosition(),
+                parent.getEndpointBWorldPosition(),
+                getWireT(),
+                parentCanSag(parent)
         );
 
         setPos(center.x, center.y, center.z);
@@ -255,61 +193,40 @@ public class WireBranchConnectorEntity extends Entity {
     public void tick() {
         super.tick();
 
-        WireEntity parent = getParentWire();
-
-        /*
-         * 親電線が見つからない場合、ここでは削除しない。
-         * チャンクの読み込み順などで一時的に取得できない場合がある。
-         */
-        if (parent == null) {
-            return;
-        }
-
+        // 親ワイヤーが一時的に未ロードでも、コネクタは削除しない。
         updatePositionFromParent();
     }
 
     @Override
     public AABB getBoundingBoxForCulling() {
-        double r = PICK_RADIUS;
-
+        // 分岐端子とアームも描画範囲に含める。
         return new AABB(
-                getX() - r,
-                getY() - r,
-                getZ() - r,
-                getX() + r,
-                getY() + r,
-                getZ() + r
+                getX() - CULL_RADIUS,
+                getY() - CULL_RADIUS,
+                getZ() - CULL_RADIUS,
+                getX() + CULL_RADIUS,
+                getY() + CULL_RADIUS,
+                getZ() + CULL_RADIUS
         );
     }
 
     @Override
     protected void readAdditionalSaveData(CompoundTag tag) {
-        if (tag.hasUUID("ParentWire")) {
-            parentWireUuid = tag.getUUID("ParentWire");
-        } else {
-            parentWireUuid = null;
-        }
+        parentWireUuid = tag.hasUUID("ParentWire")
+                ? tag.getUUID("ParentWire")
+                : null;
 
-        entityData.set(
-                DATA_WIRE_T,
-                tag.getFloat("WireT")
-        );
-
+        entityData.set(DATA_WIRE_T, tag.getFloat("WireT"));
         entityData.set(
                 DATA_DIRECTION,
                 Math.floorMod(tag.getInt("Direction"), 8)
         );
-
         entityData.set(
                 DATA_DOWN_TYPE,
-                !tag.contains("DownType")
-                        || tag.getBoolean("DownType")
+                !tag.contains("DownType") || tag.getBoolean("DownType")
         );
 
-        /*
-         * Entity ID は保存しない。
-         * ワールド読み込み後、親電線を UUID から再取得して更新する。
-         */
+        // Entity ID は保存せず、ワールド内の UUID で親を特定する。
         entityData.set(DATA_PARENT_ID, -1);
     }
 

@@ -2,7 +2,6 @@ package com.github.ohnokogikawaii.wire;
 
 import com.github.ohnokogikawaii.registry.ModEntities;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -17,31 +16,24 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 public class WireBranchConnectorItem extends Item {
-
     private static final double REACH = 6.0;
     private static final double MAX_HIT_DISTANCE = 0.40;
     private static final double ENDPOINT_MARGIN = 0.04;
-    private static final int TRACE_SAMPLES = 200;
+    private static final int TRACE_SAMPLES = 300;
 
     private final boolean downType;
 
     private record WireHit(
-            WireEntity wire,
-            double wireT,
-            double distance
+            WireEntity wire, double wireT, double distance
     ) {}
 
     public WireBranchConnectorItem(
-            Properties properties,
-            boolean downType
+            Properties properties, boolean downType
     ) {
         super(properties);
         this.downType = downType;
     }
 
-    /**
-     * ブロックを右クリックした場合も、先にワイヤーを探す。
-     */
     @Override
     public InteractionResult useOn(UseOnContext context) {
         Player player = context.getPlayer();
@@ -51,7 +43,6 @@ public class WireBranchConnectorItem extends Item {
         }
 
         Level level = context.getLevel();
-
         WireHit hit = findWireHit(level, player);
 
         if (hit == null) {
@@ -62,20 +53,16 @@ public class WireBranchConnectorItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        return placeConnector(level, player, context.getItemInHand(), hit);
+        return placeConnector(
+                level, player, context.getItemInHand(), hit
+        );
     }
 
-    /**
-     * 空中を右クリックした場合。
-     */
     @Override
     public InteractionResultHolder<ItemStack> use(
-            Level level,
-            Player player,
-            InteractionHand hand
+            Level level, Player player, InteractionHand hand
     ) {
         ItemStack stack = player.getItemInHand(hand);
-
         WireHit hit = findWireHit(level, player);
 
         if (hit == null) {
@@ -87,40 +74,23 @@ public class WireBranchConnectorItem extends Item {
         }
 
         InteractionResult result = placeConnector(
-                level,
-                player,
-                stack,
-                hit
+                level, player, stack, hit
         );
 
         return new InteractionResultHolder<>(result, stack);
     }
 
-    /**
-     * 視線から6ブロック以内にあるワイヤーを探す。
-     *
-     * ワイヤーの Entity 本体ではなく、両端を結ぶ線分に対して
-     * 視線との距離を計算する。
-     */
     private WireHit findWireHit(Level level, Player player) {
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getViewVector(1.0F).normalize();
-
         Vec3 rayEnd = eye.add(look.scale(REACH));
 
-        /*
-         * ワイヤー Entity の中心が視線範囲外にあっても、
-         * ワイヤー自体が視線の近くを通る場合があるため、
-         * 検索範囲には余裕を持たせる。
-         */
+        // WireEntity の中心だけでなく、長いワイヤーも検索する。
         AABB searchArea = new AABB(eye, rayEnd).inflate(64.0);
-
         WireHit bestHit = null;
 
         for (WireEntity wire : level.getEntitiesOfClass(
-                WireEntity.class,
-                searchArea,
-                Entity::isAlive
+                WireEntity.class, searchArea, Entity::isAlive
         )) {
             Vec3 a = wire.getEndpointAWorldPosition();
             Vec3 b = wire.getEndpointBWorldPosition();
@@ -129,18 +99,22 @@ public class WireBranchConnectorItem extends Item {
                 continue;
             }
 
+            boolean canSag = wire.getWireType() != null
+                    && wire.getWireType().canSag();
+
             for (int i = 0; i <= TRACE_SAMPLES; i++) {
                 double t = (double) i / TRACE_SAMPLES;
 
-                // 端点そのものへの設置は避ける。
                 if (t < ENDPOINT_MARGIN
                         || t > 1.0 - ENDPOINT_MARGIN) {
                     continue;
                 }
 
-                Vec3 point = a.lerp(b, t);
-                Vec3 fromEye = point.subtract(eye);
+                Vec3 point = WireBranchGeometry.pointOnWire(
+                        a, b, t, canSag
+                );
 
+                Vec3 fromEye = point.subtract(eye);
                 double alongRay = fromEye.dot(look);
 
                 if (alongRay < 0.0 || alongRay > REACH) {
@@ -167,9 +141,6 @@ public class WireBranchConnectorItem extends Item {
         return bestHit;
     }
 
-    /**
-     * 検出したワイヤー上に分岐コネクタを生成する。
-     */
     private InteractionResult placeConnector(
             Level level,
             Player player,
@@ -182,15 +153,17 @@ public class WireBranchConnectorItem extends Item {
             return InteractionResult.PASS;
         }
 
-        Vec3 a = wire.getEndpointAWorldPosition();
-        Vec3 b = wire.getEndpointBWorldPosition();
-
-        Vec3 targetPosition = a.lerp(b, hit.wireT());
+        Vec3 targetPosition = WireBranchGeometry.pointOnWire(
+                wire.getEndpointAWorldPosition(),
+                wire.getEndpointBWorldPosition(),
+                hit.wireT(),
+                wire.getWireType() != null
+                        && wire.getWireType().canSag()
+        );
 
         AABB duplicateSearch = new AABB(
-                targetPosition,
-                targetPosition
-        ).inflate(0.20);
+                targetPosition, targetPosition
+        ).inflate(0.65);
 
         for (WireBranchConnectorEntity existing :
                 level.getEntitiesOfClass(
@@ -198,10 +171,8 @@ public class WireBranchConnectorItem extends Item {
                         duplicateSearch,
                         Entity::isAlive
                 )) {
-
-            if (wire.getUUID().equals(
-                    existing.getParentWireUuid()
-            ) && Math.abs(
+            if (wire.getUUID().equals(existing.getParentWireUuid())
+                    && Math.abs(
                     existing.getWireT() - hit.wireT()
             ) < 0.025) {
                 player.displayClientMessage(
