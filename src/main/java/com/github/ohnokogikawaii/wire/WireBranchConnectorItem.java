@@ -2,13 +2,16 @@ package com.github.ohnokogikawaii.wire;
 
 import com.github.ohnokogikawaii.registry.ModEntities;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -16,10 +19,17 @@ import net.minecraft.world.phys.Vec3;
 public class WireBranchConnectorItem extends Item {
 
     private static final double REACH = 6.0;
-    private static final double MAX_HIT_DISTANCE = 0.30;
-    private static final double ENDPOINT_MARGIN = 0.03;
+    private static final double MAX_HIT_DISTANCE = 0.40;
+    private static final double ENDPOINT_MARGIN = 0.04;
+    private static final int TRACE_SAMPLES = 200;
 
     private final boolean downType;
+
+    private record WireHit(
+            WireEntity wire,
+            double wireT,
+            double distance
+    ) {}
 
     public WireBranchConnectorItem(
             Properties properties,
@@ -29,6 +39,35 @@ public class WireBranchConnectorItem extends Item {
         this.downType = downType;
     }
 
+    /**
+     * ブロックを右クリックした場合も、先にワイヤーを探す。
+     */
+    @Override
+    public InteractionResult useOn(UseOnContext context) {
+        Player player = context.getPlayer();
+
+        if (player == null) {
+            return InteractionResult.PASS;
+        }
+
+        Level level = context.getLevel();
+
+        WireHit hit = findWireHit(level, player);
+
+        if (hit == null) {
+            return InteractionResult.PASS;
+        }
+
+        if (level.isClientSide) {
+            return InteractionResult.SUCCESS;
+        }
+
+        return placeConnector(level, player, context.getItemInHand(), hit);
+    }
+
+    /**
+     * 空中を右クリックした場合。
+     */
     @Override
     public InteractionResultHolder<ItemStack> use(
             Level level,
@@ -37,15 +76,46 @@ public class WireBranchConnectorItem extends Item {
     ) {
         ItemStack stack = player.getItemInHand(hand);
 
+        WireHit hit = findWireHit(level, player);
+
+        if (hit == null) {
+            return InteractionResultHolder.pass(stack);
+        }
+
+        if (level.isClientSide) {
+            return InteractionResultHolder.sidedSuccess(stack, true);
+        }
+
+        InteractionResult result = placeConnector(
+                level,
+                player,
+                stack,
+                hit
+        );
+
+        return new InteractionResultHolder<>(result, stack);
+    }
+
+    /**
+     * 視線から6ブロック以内にあるワイヤーを探す。
+     *
+     * ワイヤーの Entity 本体ではなく、両端を結ぶ線分に対して
+     * 視線との距離を計算する。
+     */
+    private WireHit findWireHit(Level level, Player player) {
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getViewVector(1.0F).normalize();
+
         Vec3 rayEnd = eye.add(look.scale(REACH));
 
+        /*
+         * ワイヤー Entity の中心が視線範囲外にあっても、
+         * ワイヤー自体が視線の近くを通る場合があるため、
+         * 検索範囲には余裕を持たせる。
+         */
         AABB searchArea = new AABB(eye, rayEnd).inflate(64.0);
 
-        WireEntity nearestWire = null;
-        double nearestWireT = 0.5;
-        double nearestDistance = Double.MAX_VALUE;
+        WireHit bestHit = null;
 
         for (WireEntity wire : level.getEntitiesOfClass(
                 WireEntity.class,
@@ -55,14 +125,14 @@ public class WireBranchConnectorItem extends Item {
             Vec3 a = wire.getEndpointAWorldPosition();
             Vec3 b = wire.getEndpointBWorldPosition();
 
-            // ワイヤー上の位置をサンプリングして、
-            // 視線に最も近い位置を探す。
-            final int samples = 100;
+            if (a.distanceToSqr(b) < 1.0E-8) {
+                continue;
+            }
 
-            for (int i = 0; i <= samples; i++) {
-                double t = (double) i / samples;
+            for (int i = 0; i <= TRACE_SAMPLES; i++) {
+                double t = (double) i / TRACE_SAMPLES;
 
-                // 端子のすぐ近くには取り付けない。
+                // 端点そのものへの設置は避ける。
                 if (t < ENDPOINT_MARGIN
                         || t > 1.0 - ENDPOINT_MARGIN) {
                     continue;
@@ -71,57 +141,56 @@ public class WireBranchConnectorItem extends Item {
                 Vec3 point = a.lerp(b, t);
                 Vec3 fromEye = point.subtract(eye);
 
-                double rayDistance = fromEye.dot(look);
+                double alongRay = fromEye.dot(look);
 
-                if (rayDistance < 0.0 || rayDistance > REACH) {
+                if (alongRay < 0.0 || alongRay > REACH) {
                     continue;
                 }
 
                 Vec3 closestOnRay = eye.add(
-                        look.scale(rayDistance)
+                        look.scale(alongRay)
                 );
 
                 double distance = point.distanceTo(closestOnRay);
 
-                if (distance < nearestDistance) {
-                    nearestDistance = distance;
-                    nearestWire = wire;
-                    nearestWireT = t;
+                if (distance > MAX_HIT_DISTANCE) {
+                    continue;
+                }
+
+                if (bestHit == null
+                        || distance < bestHit.distance()) {
+                    bestHit = new WireHit(wire, t, distance);
                 }
             }
         }
 
-        if (nearestWire == null
-                || nearestDistance > MAX_HIT_DISTANCE) {
-            if (!level.isClientSide) {
-                player.displayClientMessage(
-                        Component.literal(
-                                "ワイヤーを狙って右クリックしてください。"
-                        ).withStyle(ChatFormatting.RED),
-                        true
-                );
-            }
+        return bestHit;
+    }
 
-            return InteractionResultHolder.pass(stack);
+    /**
+     * 検出したワイヤー上に分岐コネクタを生成する。
+     */
+    private InteractionResult placeConnector(
+            Level level,
+            Player player,
+            ItemStack stack,
+            WireHit hit
+    ) {
+        WireEntity wire = hit.wire();
+
+        if (!wire.isAlive()) {
+            return InteractionResult.PASS;
         }
 
-        if (level.isClientSide) {
-            return InteractionResultHolder.sidedSuccess(
-                    stack,
-                    true
-            );
-        }
+        Vec3 a = wire.getEndpointAWorldPosition();
+        Vec3 b = wire.getEndpointBWorldPosition();
 
-        // 同じワイヤーのほぼ同じ位置への重複設置を防ぐ。
-        Vec3 a = nearestWire.getEndpointAWorldPosition();
-        Vec3 b = nearestWire.getEndpointBWorldPosition();
-
-        Vec3 targetPosition = a.lerp(b, nearestWireT);
+        Vec3 targetPosition = a.lerp(b, hit.wireT());
 
         AABB duplicateSearch = new AABB(
                 targetPosition,
                 targetPosition
-        ).inflate(0.15);
+        ).inflate(0.20);
 
         for (WireBranchConnectorEntity existing :
                 level.getEntitiesOfClass(
@@ -130,10 +199,10 @@ public class WireBranchConnectorItem extends Item {
                         Entity::isAlive
                 )) {
 
-            if (nearestWire.getUUID().equals(
+            if (wire.getUUID().equals(
                     existing.getParentWireUuid()
             ) && Math.abs(
-                    existing.getWireT() - nearestWireT
+                    existing.getWireT() - hit.wireT()
             ) < 0.025) {
                 player.displayClientMessage(
                         Component.literal(
@@ -142,7 +211,7 @@ public class WireBranchConnectorItem extends Item {
                         true
                 );
 
-                return InteractionResultHolder.success(stack);
+                return InteractionResult.SUCCESS;
             }
         }
 
@@ -150,8 +219,8 @@ public class WireBranchConnectorItem extends Item {
                 new WireBranchConnectorEntity(
                         ModEntities.WIRE_BRANCH_CONNECTOR.get(),
                         level,
-                        nearestWire,
-                        nearestWireT,
+                        wire,
+                        hit.wireT(),
                         downType,
                         0
                 );
@@ -159,12 +228,12 @@ public class WireBranchConnectorItem extends Item {
         if (!level.addFreshEntity(connector)) {
             player.displayClientMessage(
                     Component.literal(
-                            "分岐コネクタを設置できませんでした。"
+                            "分岐コネクタを生成できませんでした。"
                     ).withStyle(ChatFormatting.RED),
                     true
             );
 
-            return InteractionResultHolder.fail(stack);
+            return InteractionResult.FAIL;
         }
 
         player.displayClientMessage(
@@ -180,7 +249,7 @@ public class WireBranchConnectorItem extends Item {
             stack.shrink(1);
         }
 
-        return InteractionResultHolder.success(stack);
+        return InteractionResult.SUCCESS;
     }
 }
 
