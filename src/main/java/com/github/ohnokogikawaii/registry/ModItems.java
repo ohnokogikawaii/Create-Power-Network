@@ -2,6 +2,7 @@ package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.wire.WireBranchConnectorItem;
+import com.github.ohnokogikawaii.wire.WireCutterItem;
 import com.github.ohnokogikawaii.wire.WireItem;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.BlockItem;
@@ -56,6 +57,14 @@ public final class ModItems {
                     () -> new WireBranchConnectorItem(
                             new Item.Properties(),
                             false
+                    )
+            );
+
+    public static final DeferredItem<WireCutterItem> WIRE_CUTTER =
+            ITEMS.register(
+                    "wire_cutter",
+                    () -> new WireCutterItem(
+                            new Item.Properties().stacksTo(1)
                     )
             );
 

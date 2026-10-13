@@ -1,8 +1,10 @@
 {
   "block.powernetwork.terminal": "端子",
   "item.powernetwork.copper_wire": "銅線",
+  "item.powernetwork.wire_cutter": "ワイヤーカッター",
   "itemGroup.powernetwork": "Power Network",
   "message.powernetwork.wire.connected": "銅線を接続しました",
+  "message.powernetwork.wire.cut": "ワイヤーを切断しました",
   "message.powernetwork.wire.first_endpoint": "1つ目の端子を選択しました",
   "message.powernetwork.wire.same_endpoint": "同じ端子には接続できません",
   "message.powernetwork.wire.too_close": "ワイヤーが短すぎます",
