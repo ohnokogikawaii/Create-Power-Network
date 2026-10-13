@@ -45,9 +45,7 @@ public final class PowerNetworkClient {
     }
 
     @SubscribeEvent
-    public static void registerAdditionalModels(
-            ModelEvent.RegisterAdditional event
-    ) {
-        event.register(ModelResourceLocation.inventory(DOWN_C_CONNECTOR_MODEL));
+    public static void registerAdditionalModels(ModelEvent.RegisterAdditional event) {
+        event.register(ModelResourceLocation.standalone(DOWN_C_CONNECTOR_MODEL));
     }
 }
