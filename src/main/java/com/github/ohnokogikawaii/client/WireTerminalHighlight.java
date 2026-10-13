@@ -1,9 +1,7 @@
-
 package com.github.ohnokogikawaii.client;
 
 import com.github.ohnokogikawaii.PowerNetwork;
-import com.github.ohnokogikawaii.hub_connector.HubConnectorBlock;
-import com.github.ohnokogikawaii.terminal.TerminalBlock;
+import com.github.ohnokogikawaii.wire.ConnectionPointManager;
 import com.github.ohnokogikawaii.wire.WireBranchConnectorEntity;
 import com.github.ohnokogikawaii.wire.WireConnectionPointProvider;
 import com.github.ohnokogikawaii.wire.WireItem;
@@ -31,6 +29,12 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 )
 public final class WireTerminalHighlight {
 
+    private static final float HIGHLIGHT_RED = 0.65F;
+    private static final float HIGHLIGHT_GREEN = 0.65F;
+    private static final float HIGHLIGHT_BLUE = 0.65F;
+
+    private static final double BRANCH_PORT_HALF_SIZE = 0.09;
+
     private WireTerminalHighlight() {
     }
 
@@ -51,38 +55,20 @@ public final class WireTerminalHighlight {
             return;
         }
 
-        // 先に分岐コネクタの接続点 C を探す。
-        WireItem.BranchHit branchHit =
-                WireItem.findBranchPortHit(
-                        minecraft.level,
-                        minecraft.player
-                );
+        /*
+         * 分岐コネクタのポートを優先する。
+         * ポートが狙われている場合は、ブロック側の処理を行わない。
+         */
+        WireItem.BranchHit branchHit = WireItem.findBranchPortHit(
+                minecraft.level,
+                minecraft.player
+        );
 
         if (branchHit != null) {
-            Vec3 port = branchHit.position();
-            double halfSize = 0.09;
-
-            AABB portBox = new AABB(
-                    port.x - halfSize,
-                    port.y - halfSize,
-                    port.z - halfSize,
-                    port.x + halfSize,
-                    port.y + halfSize,
-                    port.z + halfSize
-            );
-
-            renderOutline(
-                    event,
-                    portBox,
-                    0.65F,
-                    0.65F,
-                    0.65F
-            );
-
+            renderBranchPort(event, branchHit.position());
             return;
         }
 
-        // C が狙われていない場合は、従来のブロック端子を処理する。
         HitResult hitResult = minecraft.hitResult;
 
         if (!(hitResult instanceof BlockHitResult blockHit)
@@ -93,40 +79,65 @@ public final class WireTerminalHighlight {
         BlockPos blockPos = blockHit.getBlockPos();
         BlockState state = minecraft.level.getBlockState(blockPos);
 
-        if (state.getBlock() instanceof TerminalBlock) {
-            renderOutline(
-                    event,
-                    TerminalBlock.getHighlightBox(blockPos),
-                    0.65F,
-                    0.65F,
-                    0.65F
-            );
-            return;
-        }
-
-        if (!(state.getBlock() instanceof HubConnectorBlock)
-                || !(state.getBlock()
+        if (!(state.getBlock()
                 instanceof WireConnectionPointProvider provider)) {
             return;
         }
 
+        /*
+         * 端子・ハブ・碍子など、すべて同じ接続点検索を使用する。
+         */
         WireConnectionPointProvider.ConnectionPoint point =
-                provider.getNearestConnectionPoint(
+                ConnectionPointManager.findNearest(
+                        provider,
+                        state,
                         blockPos,
-                        blockHit.getLocation(),
-                        state
+                        blockHit.getLocation()
                 );
 
         if (point == null) {
             return;
         }
 
+        AABB highlightBox = ConnectionPointManager.getHighlightBox(
+                blockPos,
+                point
+        );
+
+        if (highlightBox == null) {
+            return;
+        }
+
         renderOutline(
                 event,
-                point.createWorldHighlightBox(blockPos),
-                0.65F,
-                0.65F,
-                0.65F
+                highlightBox,
+                HIGHLIGHT_RED,
+                HIGHLIGHT_GREEN,
+                HIGHLIGHT_BLUE
+        );
+    }
+
+    private static void renderBranchPort(
+            RenderLevelStageEvent event,
+            Vec3 port
+    ) {
+        double halfSize = BRANCH_PORT_HALF_SIZE;
+
+        AABB portBox = new AABB(
+                port.x - halfSize,
+                port.y - halfSize,
+                port.z - halfSize,
+                port.x + halfSize,
+                port.y + halfSize,
+                port.z + halfSize
+        );
+
+        renderOutline(
+                event,
+                portBox,
+                HIGHLIGHT_RED,
+                HIGHLIGHT_GREEN,
+                HIGHLIGHT_BLUE
         );
     }
 
@@ -149,7 +160,6 @@ public final class WireTerminalHighlight {
 
         Camera camera = event.getCamera();
         Vec3 cameraPosition = camera.getPosition();
-
         PoseStack poseStack = event.getPoseStack();
 
         poseStack.pushPose();

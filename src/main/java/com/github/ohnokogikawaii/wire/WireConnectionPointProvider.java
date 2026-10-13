@@ -1,4 +1,3 @@
-
 package com.github.ohnokogikawaii.wire;
 
 import net.minecraft.core.BlockPos;
@@ -26,6 +25,14 @@ public interface WireConnectionPointProvider {
             if (position == null || highlightHalfSize == null) {
                 throw new IllegalArgumentException(
                         "Connection point position and highlight size are required"
+                );
+            }
+
+            if (highlightHalfSize.x < 0.0
+                    || highlightHalfSize.y < 0.0
+                    || highlightHalfSize.z < 0.0) {
+                throw new IllegalArgumentException(
+                        "Connection point highlight size cannot be negative"
                 );
             }
         }
@@ -71,63 +78,51 @@ public interface WireConnectionPointProvider {
 
     List<ConnectionPoint> getConnectionPoints();
 
-    /**
-     * 向きを必要とするブロックは、このメソッドを実装する。
-     * 従来の端子は従来どおりの接続点を返す。
-     */
     default List<ConnectionPoint> getConnectionPoints(
             BlockState state
     ) {
         return getConnectionPoints();
     }
 
+    /**
+     * BlockState に依存しない接続点の検索。
+     * 既存コードとの互換性を維持する。
+     */
     default ConnectionPoint getNearestConnectionPoint(
             BlockPos pos,
             Vec3 hitLocation
     ) {
-        return getNearestConnectionPoint(
+        return ConnectionPointManager.findNearest(
+                this,
+                null,
                 pos,
-                hitLocation,
-                null
+                hitLocation
         );
     }
 
+    /**
+     * BlockState に依存する接続点の検索。
+     */
     default ConnectionPoint getNearestConnectionPoint(
             BlockPos pos,
             Vec3 hitLocation,
             BlockState state
     ) {
-        Vec3 localHit = hitLocation.subtract(
-                pos.getX(),
-                pos.getY(),
-                pos.getZ()
+        return ConnectionPointManager.findNearest(
+                this,
+                state,
+                pos,
+                hitLocation
         );
-
-        ConnectionPoint nearest = null;
-        double nearestDistance = Double.MAX_VALUE;
-
-        List<ConnectionPoint> points = state == null
-                ? getConnectionPoints()
-                : getConnectionPoints(state);
-
-        for (ConnectionPoint point : points) {
-            double distance =
-                    point.position().distanceToSqr(localHit);
-
-            if (distance < nearestDistance) {
-                nearestDistance = distance;
-                nearest = point;
-            }
-        }
-
-        return nearest;
     }
 
     default boolean isWireAnchorValid(
             BlockGetter level,
             BlockPos pos
     ) {
-        return level.getBlockState(pos).getBlock()
-                instanceof WireConnectionPointProvider;
+        return ConnectionPointManager.isConnectionPointProvider(
+                level,
+                pos
+        );
     }
 }
