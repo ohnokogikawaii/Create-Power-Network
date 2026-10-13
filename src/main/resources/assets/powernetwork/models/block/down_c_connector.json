@@ -2,8 +2,8 @@
 	"format_version": "26.3",
 	"credit": "Made with Blockbench",
 	"textures": {
-		"0": "powernetwork:block/c",
-		"1": "powernetwork:block/connector",
+		"0": "powernetwork:block/connector",
+		"1": "powernetwork:block/c",
 		"particle": "powernetwork:block/connector"
 	},
 	"elements": [

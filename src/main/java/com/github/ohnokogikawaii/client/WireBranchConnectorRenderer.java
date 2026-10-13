@@ -1,21 +1,55 @@
+
 package com.github.ohnokogikawaii.client;
 
+import com.github.ohnokogikawaii.PowerNetwork;
+import com.github.ohnokogikawaii.PowerNetworkClient;
 import com.github.ohnokogikawaii.wire.WireBranchConnectorEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.client.resources.model.ModelResourceLocation;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
-import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.phys.Vec3;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 public class WireBranchConnectorRenderer
         extends EntityRenderer<WireBranchConnectorEntity> {
 
-    private static final double BODY_HALF_SIZE = 0.075;
-    private static final double ARM_RADIUS = 0.025;
+    /*
+     * down_c_connector.json の connector パーツの中心:
+     *
+     * X = 8 / 16 = 0.5
+     * Y = (2.4 + 4) / 2 / 16 = 0.2
+     * Z = 8 / 16 = 0.5
+     *
+     * ブロック中央 (0.5, 0.5, 0.5) を原点にすると、
+     * 端子中心は (0, -0.3, 0) になる。
+     */
+    private static final double MODEL_PORT_DISTANCE = 0.30;
+
+    /*
+     * JSONモデルの端子中心から、実際の分岐ポートまでの距離。
+     * Entity側のPORT_OFFSETは0.45なので差分は0.15。
+     */
+    private static final double MODEL_OFFSET_CORRECTION = 0.15;
+
+    private static final Vector3f MODEL_PORT_AXIS =
+            new Vector3f(0.0F, -1.0F, 0.0F);
+
+    private static final ResourceLocation MODEL_LOCATION =
+            PowerNetworkClient.DOWN_C_CONNECTOR_MODEL;
 
     public WireBranchConnectorRenderer(
             EntityRendererProvider.Context context
@@ -32,66 +66,68 @@ public class WireBranchConnectorRenderer
             MultiBufferSource bufferSource,
             int packedLight
     ) {
+        Minecraft minecraft = Minecraft.getInstance();
+
+        BakedModel model = minecraft.getModelManager()
+                .getModel(ModelResourceLocation.inventory(MODEL_LOCATION));
+
         Vec3 origin = entity.position();
 
-        VertexConsumer buffer =
-                bufferSource.getBuffer(RenderType.lines());
+        Vec3 portWorld = entity.getBranchPortWorldPosition();
+        Vec3 portDirection = portWorld.subtract(origin);
 
-        PoseStack.Pose pose = poseStack.last();
+        if (portDirection.lengthSqr() < 1.0E-8) {
+            portDirection = new Vec3(0.0, -1.0, 0.0);
+        } else {
+            portDirection = portDirection.normalize();
+        }
 
-        double s = BODY_HALF_SIZE;
-
-        Vec3 p000 = new Vec3(-s, -s, -s);
-        Vec3 p001 = new Vec3(-s, -s,  s);
-        Vec3 p010 = new Vec3(-s,  s, -s);
-        Vec3 p011 = new Vec3(-s,  s,  s);
-        Vec3 p100 = new Vec3( s, -s, -s);
-        Vec3 p101 = new Vec3( s, -s,  s);
-        Vec3 p110 = new Vec3( s,  s, -s);
-        Vec3 p111 = new Vec3( s,  s,  s);
-
-        // 本体の12辺
-        line(buffer, pose, p000, p001, 190, 190, 195);
-        line(buffer, pose, p000, p010, 190, 190, 195);
-        line(buffer, pose, p000, p100, 190, 190, 195);
-
-        line(buffer, pose, p001, p011, 190, 190, 195);
-        line(buffer, pose, p001, p101, 190, 190, 195);
-
-        line(buffer, pose, p010, p011, 190, 190, 195);
-        line(buffer, pose, p010, p110, 190, 190, 195);
-
-        line(buffer, pose, p011, p111, 190, 190, 195);
-        line(buffer, pose, p100, p101, 190, 190, 195);
-        line(buffer, pose, p100, p110, 190, 190, 195);
-
-        line(buffer, pose, p101, p111, 190, 190, 195);
-        line(buffer, pose, p110, p111, 190, 190, 195);
-
-        // 分岐端子へのアーム
-        Vec3 port = entity
-                .getBranchPortWorldPosition()
-                .subtract(origin);
-
-        line(
-                buffer,
-                pose,
-                Vec3.ZERO,
-                port,
-                220, 180, 90
+        Quaternionf rotation = new Quaternionf().rotationTo(
+                MODEL_PORT_AXIS,
+                new Vector3f(
+                        (float) portDirection.x,
+                        (float) portDirection.y,
+                        (float) portDirection.z
+                )
         );
 
-        // 接続位置を示す十字
-        Vec3 x = new Vec3(ARM_RADIUS, 0, 0);
-        Vec3 y = new Vec3(0, ARM_RADIUS, 0);
-        Vec3 z = new Vec3(0, 0, ARM_RADIUS);
+        poseStack.pushPose();
 
-        line(buffer, pose, port.subtract(x), port.add(x),
-                220, 180, 90);
-        line(buffer, pose, port.subtract(y), port.add(y),
-                220, 180, 90);
-        line(buffer, pose, port.subtract(z), port.add(z),
-                220, 180, 90);
+        /*
+         * 端子中心を実際の分岐ポートに合わせるため、
+         * モデルの回転方向に0.15ブロック補正する。
+         */
+        poseStack.translate(
+                portDirection.x * MODEL_OFFSET_CORRECTION,
+                portDirection.y * MODEL_OFFSET_CORRECTION,
+                portDirection.z * MODEL_OFFSET_CORRECTION
+        );
+
+        poseStack.mulPose(rotation);
+
+        /*
+         * ブロックモデルは通常 0～1 の座標なので、
+         * ブロック中央がエンティティ原点になるように移動。
+         */
+        poseStack.translate(-0.5, -0.5, -0.5);
+
+        BlockRenderDispatcher blockRenderer =
+                minecraft.getBlockRenderer();
+
+        blockRenderer.getModelRenderer().tesselateBlock(
+                entity.level(),
+                model,
+                Blocks.WHITE_WOOL.defaultBlockState(),
+                BlockPos.containing(origin),
+                poseStack,
+                bufferSource.getBuffer(RenderType.cutoutMipped()),
+                false,
+                RandomSource.create(entity.getId()),
+                entity.getId(),
+                OverlayTexture.NO_OVERLAY
+        );
+
+        poseStack.popPose();
 
         super.render(
                 entity,
@@ -103,57 +139,17 @@ public class WireBranchConnectorRenderer
         );
     }
 
-    private static void line(
-            VertexConsumer buffer,
-            PoseStack.Pose pose,
-            Vec3 start,
-            Vec3 end,
-            int red,
-            int green,
-            int blue
-    ) {
-        Vec3 direction = end.subtract(start);
-
-        if (direction.lengthSqr() < 1.0E-10) {
-            return;
-        }
-
-        Vec3 normal = direction.normalize();
-
-        buffer.addVertex(
-                        pose,
-                        (float) start.x,
-                        (float) start.y,
-                        (float) start.z
-                )
-                .setColor(red, green, blue, 255)
-                .setNormal(
-                        pose,
-                        (float) normal.x,
-                        (float) normal.y,
-                        (float) normal.z
-                );
-
-        buffer.addVertex(
-                        pose,
-                        (float) end.x,
-                        (float) end.y,
-                        (float) end.z
-                )
-                .setColor(red, green, blue, 255)
-                .setNormal(
-                        pose,
-                        (float) normal.x,
-                        (float) normal.y,
-                        (float) normal.z
-                );
-    }
-
     @Override
     public ResourceLocation getTextureLocation(
             WireBranchConnectorEntity entity
     ) {
-        return MissingTextureAtlasSprite.getLocation();
+        /*
+         * テクスチャはベイク済みモデルの各面から参照される。
+         * この戻り値はEntityRendererの必須実装として指定する。
+         */
+        return ResourceLocation.fromNamespaceAndPath(
+                PowerNetwork.MODID,
+                "textures/block/connector.png"
+        );
     }
 }
-
