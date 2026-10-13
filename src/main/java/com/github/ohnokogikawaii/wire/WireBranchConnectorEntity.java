@@ -41,7 +41,7 @@ public class WireBranchConnectorEntity extends Entity {
                     EntityDataSerializers.BOOLEAN
             );
 
-    private static final double PORT_OFFSET = 0.45;
+    public static final double PORT_OFFSET = 0.45;
     private static final double CULL_RADIUS = 0.65;
 
     private UUID parentWireUuid;
@@ -173,6 +173,11 @@ public class WireBranchConnectorEntity extends Entity {
                 a, b, getWireT(), canSag,
                 getDirectionIndex(), PORT_OFFSET
         );
+    }
+
+    public Vec3 getBranchPortWorldPosition() {
+        Vec3 resolved = getResolvedBranchPortWorldPosition();
+        return resolved != null ? resolved : position();
     }
 
     private void updatePositionFromParent() {

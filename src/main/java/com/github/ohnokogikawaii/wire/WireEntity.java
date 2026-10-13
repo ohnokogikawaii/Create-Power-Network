@@ -261,21 +261,27 @@ public class WireEntity extends Entity {
                 instanceof WireConnectionPointProvider;
     }
 
+
     private void updateAttachedEndpoints() {
         WireBranchConnectorEntity branchA = getBranch(true);
         if (branchA != null && branchA.isAlive()) {
-            setExactEndpointA(
-                    branchA.getBranchPortWorldPosition().toVector3f()
-            );
+            // 親ワイヤーが未ロードの間は保存済み端点を変更しない。
+            Vec3 port = branchA.getResolvedBranchPortWorldPosition();
+            if (port != null) {
+                setExactEndpointA(port.toVector3f());
+            }
         }
 
         WireBranchConnectorEntity branchB = getBranch(false);
         if (branchB != null && branchB.isAlive()) {
-            setExactEndpointB(
-                    branchB.getBranchPortWorldPosition().toVector3f()
-            );
+            // 親ワイヤーが未ロードの間は保存済み端点を変更しない。
+            Vec3 port = branchB.getResolvedBranchPortWorldPosition();
+            if (port != null) {
+                setExactEndpointB(port.toVector3f());
+            }
         }
     }
+
 
     private void updatePosition() {
         Vec3 a = getEndpointAWorldPosition();
