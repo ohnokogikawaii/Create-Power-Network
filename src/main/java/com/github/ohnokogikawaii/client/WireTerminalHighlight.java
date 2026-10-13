@@ -4,6 +4,7 @@ package com.github.ohnokogikawaii.client;
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.hub_connector.HubConnectorBlock;
 import com.github.ohnokogikawaii.terminal.TerminalBlock;
+import com.github.ohnokogikawaii.wire.WireBranchConnectorEntity;
 import com.github.ohnokogikawaii.wire.WireConnectionPointProvider;
 import com.github.ohnokogikawaii.wire.WireItem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -50,6 +51,38 @@ public final class WireTerminalHighlight {
             return;
         }
 
+        // 先に分岐コネクタの接続点 C を探す。
+        WireItem.BranchHit branchHit =
+                WireItem.findBranchPortHit(
+                        minecraft.level,
+                        minecraft.player
+                );
+
+        if (branchHit != null) {
+            Vec3 port = branchHit.position();
+            double halfSize = 0.09;
+
+            AABB portBox = new AABB(
+                    port.x - halfSize,
+                    port.y - halfSize,
+                    port.z - halfSize,
+                    port.x + halfSize,
+                    port.y + halfSize,
+                    port.z + halfSize
+            );
+
+            renderOutline(
+                    event,
+                    portBox,
+                    0.65F,
+                    0.65F,
+                    0.65F
+            );
+
+            return;
+        }
+
+        // C が狙われていない場合は、従来のブロック端子を処理する。
         HitResult hitResult = minecraft.hitResult;
 
         if (!(hitResult instanceof BlockHitResult blockHit)
@@ -72,7 +105,8 @@ public final class WireTerminalHighlight {
         }
 
         if (!(state.getBlock() instanceof HubConnectorBlock)
-                || !(state.getBlock() instanceof WireConnectionPointProvider provider)) {
+                || !(state.getBlock()
+                instanceof WireConnectionPointProvider provider)) {
             return;
         }
 
