@@ -17,6 +17,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.UUID;
 
 public class WireBranchConnectorEntity extends Entity {
+
     private static final EntityDataAccessor<Integer> DATA_PARENT_ID =
             SynchedEntityData.defineId(
                     WireBranchConnectorEntity.class,
@@ -41,9 +42,22 @@ public class WireBranchConnectorEntity extends Entity {
                     EntityDataSerializers.BOOLEAN
             );
 
-    public static final double PORT_OFFSET = 0.45;
+    /**
+     * ワイヤー中心から分岐接続点までのオフセット。
+     */
+    private static final double PORT_OFFSET = 0.45;
+
+    /**
+     * 分岐コネクタの描画カリング範囲。
+     */
     private static final double CULL_RADIUS = 0.65;
 
+    /**
+     * 親ワイヤーの UUID。
+     *
+     * Entity ID はワールドの再読み込みで変化するため、
+     * 永続保存には UUID を使用する。
+     */
     private UUID parentWireUuid;
 
     public WireBranchConnectorEntity(
@@ -51,6 +65,7 @@ public class WireBranchConnectorEntity extends Entity {
             Level level
     ) {
         super(type, level);
+
         noPhysics = true;
         setNoGravity(true);
     }
@@ -69,6 +84,7 @@ public class WireBranchConnectorEntity extends Entity {
         setWireT(wireT);
         setDownType(downType);
         setDirectionIndex(directionIndex);
+
         updatePositionFromParent();
     }
 
@@ -82,6 +98,9 @@ public class WireBranchConnectorEntity extends Entity {
         builder.define(DATA_DOWN_TYPE, true);
     }
 
+    /**
+     * 親ワイヤーを設定する。
+     */
     public void setParentWire(WireEntity wire) {
         if (wire == null) {
             parentWireUuid = null;
@@ -101,6 +120,13 @@ public class WireBranchConnectorEntity extends Entity {
         return entityData.get(DATA_PARENT_ID);
     }
 
+    /**
+     * 親ワイヤー上の位置を設定する。
+     *
+     * 0.0 = 端点 A
+     * 0.5 = 中央付近
+     * 1.0 = 端点 B
+     */
     public void setWireT(double wireT) {
         entityData.set(
                 DATA_WIRE_T,
@@ -112,6 +138,9 @@ public class WireBranchConnectorEntity extends Entity {
         return entityData.get(DATA_WIRE_T);
     }
 
+    /**
+     * 分岐方向を 0～7 の範囲に正規化する。
+     */
     public void setDirectionIndex(int directionIndex) {
         entityData.set(
                 DATA_DIRECTION,
@@ -131,11 +160,27 @@ public class WireBranchConnectorEntity extends Entity {
         return entityData.get(DATA_DOWN_TYPE);
     }
 
+    /**
+     * 親ワイヤーを取得する。
+     *
+     * クライアント側では Entity ID、
+     * サーバー側では保存された UUID を使用する。
+     *
+     * 親ワイヤーがまだ読み込まれていない場合は null を返す。
+     */
     public WireEntity getParentWire() {
         if (level().isClientSide()) {
-            Entity entity = level().getEntity(getParentWireId());
+            int parentId = getParentWireId();
 
-            return entity instanceof WireEntity wire ? wire : null;
+            if (parentId < 0) {
+                return null;
+            }
+
+            Entity entity = level().getEntity(parentId);
+
+            return entity instanceof WireEntity wire
+                    ? wire
+                    : null;
         }
 
         if (!(level() instanceof ServerLevel serverLevel)
@@ -144,46 +189,83 @@ public class WireBranchConnectorEntity extends Entity {
         }
 
         Entity entity = serverLevel.getEntity(parentWireUuid);
-        return entity instanceof WireEntity wire ? wire : null;
+
+        return entity instanceof WireEntity wire
+                ? wire
+                : null;
     }
 
     private boolean parentCanSag(WireEntity parent) {
-        return parent.getWireType() != null
-                && parent.getWireType().canSag();
+        WireType wireType = parent.getWireType();
+
+        return wireType != null && wireType.canSag();
     }
 
-    public Vec3 getBranchPortWorldPosition() {
+    /**
+     * 親ワイヤーが取得できる場合のみ、
+     * 分岐接続ポートのワールド座標を計算する。
+     *
+     * 親ワイヤーが未ロード、または取得できない場合は
+     * null を返し、保存済みの接続座標を変更させない。
+     */
+    public Vec3 getResolvedBranchPortWorldPosition() {
         WireEntity parent = getParentWire();
 
-        if (parent == null) {
-            return position();
+        if (parent == null || !parent.isAlive()) {
+            return null;
         }
 
-        Vec3 a = parent.getEndpointAWorldPosition();
-        Vec3 b = parent.getEndpointBWorldPosition();
+        Vec3 endpointA = parent.getEndpointAWorldPosition();
+        Vec3 endpointB = parent.getEndpointBWorldPosition();
+
         boolean canSag = parentCanSag(parent);
 
         if (isDownType()) {
             return WireBranchGeometry.downwardPortPosition(
-                    a, b, getWireT(), canSag, PORT_OFFSET
+                    endpointA,
+                    endpointB,
+                    getWireT(),
+                    canSag,
+                    PORT_OFFSET
             );
         }
 
         return WireBranchGeometry.branchPortPosition(
-                a, b, getWireT(), canSag,
-                getDirectionIndex(), PORT_OFFSET
+                endpointA,
+                endpointB,
+                getWireT(),
+                canSag,
+                getDirectionIndex(),
+                PORT_OFFSET
         );
     }
 
+    /**
+     * 分岐接続ポートの座標を取得する。
+     *
+     * 親ワイヤーが解決できない場合は、
+     * コネクタ自身の現在位置を返す。
+     *
+     * 描画や操作時の位置取得向け。
+     * 接続先ワイヤーの追従更新には、
+     * getResolvedBranchPortWorldPosition() を使用する。
+     */
     public Vec3 getBranchPortWorldPosition() {
         Vec3 resolved = getResolvedBranchPortWorldPosition();
+
         return resolved != null ? resolved : position();
     }
 
+    /**
+     * 親ワイヤーの中心位置にコネクタを追従させる。
+     *
+     * 親ワイヤーが取得できない場合は、
+     * 現在の位置を維持する。
+     */
     private void updatePositionFromParent() {
         WireEntity parent = getParentWire();
 
-        if (parent == null) {
+        if (parent == null || !parent.isAlive()) {
             return;
         }
 
@@ -201,13 +283,13 @@ public class WireBranchConnectorEntity extends Entity {
     public void tick() {
         super.tick();
 
-        // 親ワイヤーが一時的に未ロードでも、コネクタは削除しない。
+        // 親ワイヤーが一時的に未ロードでも削除しない。
+        // 親が取得できたときだけ位置を更新する。
         updatePositionFromParent();
     }
 
     @Override
     public AABB getBoundingBoxForCulling() {
-        // 分岐端子とアームも描画範囲に含める。
         return new AABB(
                 getX() - CULL_RADIUS,
                 getY() - CULL_RADIUS,
@@ -224,17 +306,24 @@ public class WireBranchConnectorEntity extends Entity {
                 ? tag.getUUID("ParentWire")
                 : null;
 
-        entityData.set(DATA_WIRE_T, tag.getFloat("WireT"));
+        entityData.set(
+                DATA_WIRE_T,
+                tag.getFloat("WireT")
+        );
+
         entityData.set(
                 DATA_DIRECTION,
                 Math.floorMod(tag.getInt("Direction"), 8)
         );
+
         entityData.set(
                 DATA_DOWN_TYPE,
-                !tag.contains("DownType") || tag.getBoolean("DownType")
+                !tag.contains("DownType")
+                        || tag.getBoolean("DownType")
         );
 
-        // Entity ID は保存せず、ワールド内の UUID で親を特定する。
+        // Entity ID は保存データから復元しない。
+        // クライアント側の ID は同期後に取得する。
         entityData.set(DATA_PARENT_ID, -1);
     }
 
@@ -244,16 +333,33 @@ public class WireBranchConnectorEntity extends Entity {
             tag.putUUID("ParentWire", parentWireUuid);
         }
 
-        tag.putFloat("WireT", entityData.get(DATA_WIRE_T));
-        tag.putInt("Direction", entityData.get(DATA_DIRECTION));
-        tag.putBoolean("DownType", entityData.get(DATA_DOWN_TYPE));
+        tag.putFloat(
+                "WireT",
+                entityData.get(DATA_WIRE_T)
+        );
+
+        tag.putInt(
+                "Direction",
+                entityData.get(DATA_DIRECTION)
+        );
+
+        tag.putBoolean(
+                "DownType",
+                entityData.get(DATA_DOWN_TYPE)
+        );
     }
 
-
     @Override
-    public InteractionResult interact(Player player, InteractionHand hand) {
+    public InteractionResult interact(
+            Player player,
+            InteractionHand hand
+    ) {
         if (player.getItemInHand(hand).getItem() instanceof WireItem) {
-            return WireItem.selectBranchEndpoint(player, hand, this);
+            return WireItem.selectBranchEndpoint(
+                    player,
+                    hand,
+                    this
+            );
         }
 
         return super.interact(player, hand);
