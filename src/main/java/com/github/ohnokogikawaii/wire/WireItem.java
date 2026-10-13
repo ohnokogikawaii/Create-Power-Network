@@ -372,4 +372,35 @@ public class WireItem extends Item {
     public static void clearSelection(UUID playerId) {
         FIRST_ENDPOINTS.remove(playerId);
     }
+
+
+    public static InteractionResult selectBranchEndpoint(
+            Player player,
+            InteractionHand hand,
+            WireBranchConnectorEntity branch
+    ) {
+        if (!(player.getItemInHand(hand).getItem() instanceof WireItem item)) {
+            return InteractionResult.PASS;
+        }
+
+        Level level = player.level();
+
+        if (level.isClientSide) {
+            return InteractionResult.SUCCESS;
+        }
+
+        Vec3 portPosition = branch.getBranchPortWorldPosition();
+
+        return selectEndpoint(
+                level,
+                player,
+                new EndpointSelection(
+                        BlockPos.containing(portPosition),
+                        portPosition,
+                        branch.getUUID(),
+                        item.getWireTypeId()
+                )
+        );
+    }
+
 }

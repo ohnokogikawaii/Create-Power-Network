@@ -41,7 +41,7 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
             MultiBufferSource bufferSource,
             int packedLight
     ) {
-        Vec3 origin = entity.position();
+        Vec3 origin = entity.getPosition(partialTick);
         Vec3 a = entity.getEndpointAPosition().subtract(origin);
         Vec3 b = entity.getEndpointBPosition().subtract(origin);
 
