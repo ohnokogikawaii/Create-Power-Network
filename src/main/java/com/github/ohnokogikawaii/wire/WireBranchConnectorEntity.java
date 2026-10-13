@@ -262,11 +262,22 @@ public class WireBranchConnectorEntity extends Entity {
      * 親ワイヤーが取得できない場合は、
      * 現在の位置を維持する。
      */
+    /**
+     * 親ワイヤーの位置にコネクタを追従させる。
+     *
+     * サーバー側で親ワイヤーを再取得できた場合は、
+     * Entity ID も更新してクライアントへ同期する。
+     */
     private void updatePositionFromParent() {
         WireEntity parent = getParentWire();
 
         if (parent == null || !parent.isAlive()) {
             return;
+        }
+
+        // UUID で親を再取得できたら、現在の Entity ID を同期する。
+        if (!level().isClientSide()) {
+            entityData.set(DATA_PARENT_ID, parent.getId());
         }
 
         Vec3 center = WireBranchGeometry.pointOnWire(
