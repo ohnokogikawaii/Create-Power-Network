@@ -28,6 +28,10 @@ public final class ConnectionPointManager {
             WireConnectionPointProvider provider,
             BlockState state
     ) {
+        if (provider == null) {
+            return List.of();
+        }
+
         List<WireConnectionPointProvider.ConnectionPoint> points =
                 state == null
                         ? provider.getConnectionPoints()
@@ -63,7 +67,12 @@ public final class ConnectionPointManager {
             return null;
         }
 
-        return findNearest(provider, state, blockPos, hitLocation);
+        return findNearest(
+                provider,
+                state,
+                blockPos,
+                hitLocation
+        );
     }
 
     public static WireConnectionPointProvider.ConnectionPoint
@@ -73,7 +82,7 @@ public final class ConnectionPointManager {
             BlockPos blockPos,
             Vec3 hitLocation
     ) {
-        if (provider == null || hitLocation == null) {
+        if (provider == null || blockPos == null || hitLocation == null) {
             return null;
         }
 
@@ -83,6 +92,10 @@ public final class ConnectionPointManager {
         double nearestDistance = Double.MAX_VALUE;
 
         for (var point : getConnectionPoints(provider, state)) {
+            if (point == null) {
+                continue;
+            }
+
             double distance = point.position().distanceToSqr(localHit);
 
             if (distance < nearestDistance) {
@@ -94,13 +107,73 @@ public final class ConnectionPointManager {
         return nearest;
     }
 
+    /**
+     * 表示方式に応じたハイライト箱を取得する。
+     */
+    public static AABB getHighlightBox(
+            WireConnectionPointProvider provider,
+            BlockState state,
+            BlockGetter level,
+            BlockPos blockPos,
+            WireConnectionPointProvider.ConnectionPoint point
+    ) {
+        if (provider == null
+                || state == null
+                || level == null
+                || blockPos == null) {
+            return null;
+        }
+
+        if (provider.getHighlightMode(state)
+                == WireConnectionPointProvider.HighlightMode.BLOCK) {
+            return provider.getBlockHighlightBox(
+                    state,
+                    level,
+                    blockPos
+            );
+        }
+
+        if (point == null) {
+            return null;
+        }
+
+        return point.createWorldHighlightBox(blockPos);
+    }
+
+    /**
+     * 表示方式に応じたハイライト色を取得する。
+     */
+    public static int getHighlightColor(
+            WireConnectionPointProvider provider,
+            BlockState state,
+            WireConnectionPointProvider.ConnectionPoint point
+    ) {
+        if (provider == null || state == null) {
+            return WireConnectionPointProvider.DEFAULT_HIGHLIGHT_COLOR;
+        }
+
+        int color;
+
+        if (provider.getHighlightMode(state)
+                == WireConnectionPointProvider.HighlightMode.BLOCK) {
+            color = provider.getBlockHighlightColor(state);
+        } else {
+            color = provider.getConnectionPointHighlightColor(
+                    state,
+                    point
+            );
+        }
+
+        return color & 0xFFFFFF;
+    }
+
     public static Vec3 toWorldPosition(
             BlockPos blockPos,
             WireConnectionPointProvider.ConnectionPoint point
     ) {
-        if (point == null) {
+        if (blockPos == null || point == null) {
             throw new IllegalArgumentException(
-                    "Connection point cannot be null"
+                    "Block position and connection point are required"
             );
         }
 
@@ -118,11 +191,15 @@ public final class ConnectionPointManager {
         );
     }
 
+    /**
+     * 既存コードとの互換性用。
+     * 接続点単体のハイライト箱を返す。
+     */
     public static AABB getHighlightBox(
             BlockPos blockPos,
             WireConnectionPointProvider.ConnectionPoint point
     ) {
-        return point == null
+        return point == null || blockPos == null
                 ? null
                 : point.createWorldHighlightBox(blockPos);
     }

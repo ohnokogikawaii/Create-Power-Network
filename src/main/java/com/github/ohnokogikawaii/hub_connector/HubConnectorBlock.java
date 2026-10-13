@@ -111,7 +111,8 @@ public class HubConnectorBlock extends HorizontalDirectionalBlock
             result.add(new ConnectionPoint(
                     point.id(),
                     rotated,
-                    point.highlightHalfSize()
+                    point.highlightHalfSize(),
+                    point.highlightColor()
             ));
         }
 
@@ -214,6 +215,11 @@ public class HubConnectorBlock extends HorizontalDirectionalBlock
             CollisionContext context
     ) {
         return getShape(state, level, pos, context);
+    }
+
+    @Override
+    public HighlightMode getHighlightMode(BlockState state) {
+        return HighlightMode.CONNECTION_POINT;
     }
 }
 

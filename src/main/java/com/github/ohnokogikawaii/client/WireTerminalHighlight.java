@@ -2,7 +2,6 @@ package com.github.ohnokogikawaii.client;
 
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.wire.ConnectionPointManager;
-import com.github.ohnokogikawaii.wire.WireBranchConnectorEntity;
 import com.github.ohnokogikawaii.wire.WireConnectionPointProvider;
 import com.github.ohnokogikawaii.wire.WireItem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -29,9 +28,7 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 )
 public final class WireTerminalHighlight {
 
-    private static final float HIGHLIGHT_RED = 0.65F;
-    private static final float HIGHLIGHT_GREEN = 0.65F;
-    private static final float HIGHLIGHT_BLUE = 0.65F;
+    private static final int DEFAULT_HIGHLIGHT_COLOR = 0xA6A6A6;
 
     private static final double BRANCH_PORT_HALF_SIZE = 0.09;
 
@@ -57,7 +54,7 @@ public final class WireTerminalHighlight {
 
         /*
          * 分岐コネクタのポートを優先する。
-         * ポートが狙われている場合は、ブロック側の処理を行わない。
+         * ポートが狙われている場合はブロック側を描画しない。
          */
         WireItem.BranchHit branchHit = WireItem.findBranchPortHit(
                 minecraft.level,
@@ -85,7 +82,11 @@ public final class WireTerminalHighlight {
         }
 
         /*
-         * 端子・ハブ・碍子など、すべて同じ接続点検索を使用する。
+         * 接続点を検索する。
+         *
+         * BLOCK モードの場合も接続点の存在は必要。
+         * これは電線接続先として定義されたブロックだけを
+         * ハイライトするため。
          */
         WireConnectionPointProvider.ConnectionPoint point =
                 ConnectionPointManager.findNearest(
@@ -100,6 +101,9 @@ public final class WireTerminalHighlight {
         }
 
         AABB highlightBox = ConnectionPointManager.getHighlightBox(
+                provider,
+                state,
+                minecraft.level,
                 blockPos,
                 point
         );
@@ -108,15 +112,22 @@ public final class WireTerminalHighlight {
             return;
         }
 
+        int color = ConnectionPointManager.getHighlightColor(
+                provider,
+                state,
+                point
+        );
+
         renderOutline(
                 event,
                 highlightBox,
-                HIGHLIGHT_RED,
-                HIGHLIGHT_GREEN,
-                HIGHLIGHT_BLUE
+                color
         );
     }
 
+    /**
+     * 分岐コネクタの接続ポートをハイライトする。
+     */
     private static void renderBranchPort(
             RenderLevelStageEvent event,
             Vec3 port
@@ -135,9 +146,7 @@ public final class WireTerminalHighlight {
         renderOutline(
                 event,
                 portBox,
-                HIGHLIGHT_RED,
-                HIGHLIGHT_GREEN,
-                HIGHLIGHT_BLUE
+                DEFAULT_HIGHLIGHT_COLOR
         );
     }
 
@@ -149,12 +158,13 @@ public final class WireTerminalHighlight {
                 || offHand.getItem() instanceof WireItem;
     }
 
+    /**
+     * RGB形式の色を使ってワールド内に輪郭を描画する。
+     */
     private static void renderOutline(
             RenderLevelStageEvent event,
             AABB worldBox,
-            float red,
-            float green,
-            float blue
+            int rgb
     ) {
         Minecraft minecraft = Minecraft.getInstance();
 
@@ -162,7 +172,12 @@ public final class WireTerminalHighlight {
         Vec3 cameraPosition = camera.getPosition();
         PoseStack poseStack = event.getPoseStack();
 
+        float red = ((rgb >> 16) & 0xFF) / 255.0F;
+        float green = ((rgb >> 8) & 0xFF) / 255.0F;
+        float blue = (rgb & 0xFF) / 255.0F;
+
         poseStack.pushPose();
+
         poseStack.translate(
                 -cameraPosition.x,
                 -cameraPosition.y,
