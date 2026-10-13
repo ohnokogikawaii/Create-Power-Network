@@ -115,7 +115,7 @@ public final class WireBranchGeometry {
             boolean canSag, double offset
     ) {
         return pointOnWire(a, b, t, canSag)
-                .add(0.0, -offset + 0.10, 0.0);
+                .add(0.0, -offset + 0.0, 0.0);
     }
 
     private static double calculateSag(
@@ -167,7 +167,7 @@ public final class WireBranchGeometry {
             Vec3 a, Vec3 b, double sag, double t
     ) {
         return a.lerp(b, t).add(
-                0.0, -4.0 * sag * t * (1.0 - t), 0.0
+                0.0, -4.5 * sag * t * (1.0 - t), 0.0
         );
     }
 
