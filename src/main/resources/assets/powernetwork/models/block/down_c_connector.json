@@ -2,9 +2,9 @@
 	"format_version": "26.3",
 	"credit": "Made with Blockbench",
 	"textures": {
-		"0": "block/connector",
-		"1": "block/c",
-		"particle": "block/connector"
+		"0": "powernetwork:block/c",
+		"1": "powernetwork:block/connector",
+		"particle": "powernetwork:block/connector"
 	},
 	"elements": [
 		{
