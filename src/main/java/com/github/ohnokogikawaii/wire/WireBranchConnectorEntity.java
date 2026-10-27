@@ -290,6 +290,7 @@ public class WireBranchConnectorEntity extends Entity {
         setPos(center.x, center.y, center.z);
     }
 
+
     @Override
     public void tick() {
         super.tick();

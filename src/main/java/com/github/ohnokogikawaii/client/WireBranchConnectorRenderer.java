@@ -69,7 +69,11 @@ public class WireBranchConnectorRenderer
         Minecraft minecraft = Minecraft.getInstance();
 
         BakedModel model = minecraft.getModelManager()
-                .getModel(ModelResourceLocation.inventory(MODEL_LOCATION));
+                .getModel(
+                        ModelResourceLocation.standalone(
+                                PowerNetworkClient.DOWN_C_CONNECTOR_MODEL
+                        )
+                );
 
         Vec3 origin = entity.position();
 
