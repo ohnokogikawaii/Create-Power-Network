@@ -39,6 +39,10 @@ public class PowerNetwork {
                                 output.accept(ModItems.WIRE_BRANCH_CONNECTOR_DOWN.get());
                                 output.accept(ModItems.WIRE_BRANCH_CONNECTOR_ANGLED.get());
                                 output.accept(ModItems.WIRE_CUTTER.get());
+                                output.accept(ModItems.LOW_VOLTAGE_INSULATOR.get());
+                                output.accept(ModItems.HIGH_VOLTAGE_INSULATOR.get());
+                                output.accept(ModItems.EXTRA_HIGH_VOLTAGE_INSULATOR.get());
+                                output.accept(ModItems.TRANSMISSION_LINE_INSULATOR.get());
                             })
                             .build()
             );

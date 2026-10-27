@@ -68,6 +68,30 @@ public final class ModItems {
                     )
             );
 
+    public static final DeferredItem<BlockItem> LOW_VOLTAGE_INSULATOR =
+            ITEMS.registerSimpleBlockItem(
+                    "low_voltage_insulator",
+                    ModBlocks.LOW_VOLTAGE_INSULATOR
+            );
+
+    public static final DeferredItem<BlockItem> HIGH_VOLTAGE_INSULATOR =
+            ITEMS.registerSimpleBlockItem(
+                    "high_voltage_insulator",
+                    ModBlocks.HIGH_VOLTAGE_INSULATOR
+            );
+
+    public static final DeferredItem<BlockItem> EXTRA_HIGH_VOLTAGE_INSULATOR =
+            ITEMS.registerSimpleBlockItem(
+                    "extra_high_voltage_insulator",
+                    ModBlocks.EXTRA_HIGH_VOLTAGE_INSULATOR
+            );
+
+    public static final DeferredItem<BlockItem> TRANSMISSION_LINE_INSULATOR =
+            ITEMS.registerSimpleBlockItem(
+                    "transmission_line_insulator",
+                    ModBlocks.TRANSMISSION_LINE_INSULATOR
+            );
+
     private ModItems() {
     }
 

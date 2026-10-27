@@ -1,5 +1,9 @@
 {
+  "block.powernetwork.extra_high_voltage_insulator": "特別高圧碍子",
+  "block.powernetwork.high_voltage_insulator": "高圧碍子",
+  "block.powernetwork.low_voltage_insulator": "低圧碍子",
   "block.powernetwork.terminal": "端子",
+  "block.powernetwork.transmission_line_insulator": "送電線用碍子",
   "item.powernetwork.copper_wire": "銅線",
   "item.powernetwork.wire_cutter": "ワイヤーカッター",
   "itemGroup.powernetwork": "Power Network",
