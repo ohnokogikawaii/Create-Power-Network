@@ -2,6 +2,7 @@
 package com.github.ohnokogikawaii.insulator;
 
 import com.github.ohnokogikawaii.wire.WireConnectionPointProvider;
+import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -214,5 +215,10 @@ public class InsulatorBlock extends HorizontalDirectionalBlock
             CollisionContext context
     ) {
         return getShape(state, level, pos, context);
+    }
+
+    @Override
+    protected MapCodec<InsulatorBlock> codec() {
+        return MapCodec.unit(this);
     }
 }
