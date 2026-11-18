@@ -48,6 +48,14 @@ public class WireItem extends Item {
             double distanceAlongRay
     ) {}
 
+    private record ReconnectHit(
+            WireEntity wire,
+            boolean endpointA,
+            Vec3 position,
+            double distanceToRay,
+            double distanceAlongRay
+    ) {}
+
     private record SupportCandidate(
             WireEntity wire,
             double t,
@@ -69,6 +77,8 @@ public class WireItem extends Item {
 
         private BlockPos lastInsulatorPos;
         private Vec3 lastInsulatorPosition;
+        private WireEntity reconnectSource;
+        private boolean reconnectSourceA;
 
         private RouteState(EndpointSelection start) {
             this.start = start;
@@ -714,6 +724,34 @@ public class WireItem extends Item {
 
         BranchHit hit = findBranchPortHit(level, player);
 
+        ReconnectHit reconnectHit =
+                findReconnectableTerminalHit(level, player);
+
+// 再接続可能な端末が分岐コネクタより手前にある場合は、
+// そちらを優先する。
+        if (reconnectHit != null
+                && (hit == null
+                || reconnectHit.distanceAlongRay()
+                < hit.distanceAlongRay())) {
+
+            if (level.isClientSide) {
+                return InteractionResultHolder.sidedSuccess(
+                        stack,
+                        true
+                );
+            }
+
+            InteractionResult result =
+                    selectReconnectableEndpoint(
+                            level,
+                            player,
+                            reconnectHit,
+                            wireTypeId
+                    );
+
+            return new InteractionResultHolder<>(result, stack);
+        }
+
         if (hit != null) {
             if (level.isClientSide) {
                 return InteractionResultHolder.sidedSuccess(
@@ -819,6 +857,79 @@ public class WireItem extends Item {
         return bestHit;
     }
 
+    /**
+     * 視線上にある再接続可能な電線端末を検索する。
+     */
+    private static ReconnectHit findReconnectableTerminalHit(
+            Level level,
+            Player player
+    ) {
+        Vec3 eye = player.getEyePosition();
+        Vec3 look = player.getViewVector(1.0F).normalize();
+        Vec3 rayEnd = eye.add(look.scale(REACH));
+
+        AABB searchArea = new AABB(eye, rayEnd).inflate(1.0);
+
+        ReconnectHit bestHit = null;
+
+        for (WireEntity wire : level.getEntitiesOfClass(
+                WireEntity.class,
+                searchArea,
+                Entity::isAlive
+        )) {
+            for (boolean endpointA : new boolean[]{true, false}) {
+
+                boolean reconnectable = endpointA
+                        ? wire.isReconnectableA()
+                        : wire.isReconnectableB();
+
+                if (!reconnectable) {
+                    continue;
+                }
+
+                Vec3 position = endpointA
+                        ? wire.getEndpointAWorldPosition()
+                        : wire.getEndpointBWorldPosition();
+
+                Vec3 fromEye = position.subtract(eye);
+
+                double alongRay = fromEye.dot(look);
+
+                if (alongRay < 0.0 || alongRay > REACH) {
+                    continue;
+                }
+
+                Vec3 closestOnRay =
+                        eye.add(look.scale(alongRay));
+
+                double distance =
+                        position.distanceTo(closestOnRay);
+
+                if (distance > PORT_HIT_DISTANCE) {
+                    continue;
+                }
+
+                if (bestHit == null
+                        || distance < bestHit.distanceToRay()
+                        || (Math.abs(
+                        distance - bestHit.distanceToRay()
+                ) < 1.0E-6
+                        && alongRay < bestHit.distanceAlongRay())) {
+
+                    bestHit = new ReconnectHit(
+                            wire,
+                            endpointA,
+                            position,
+                            distance,
+                            alongRay
+                    );
+                }
+            }
+        }
+
+        return bestHit;
+    }
+
     private static InteractionResult selectEndpoint(
             Level level,
             Player player,
@@ -854,6 +965,78 @@ public class WireItem extends Item {
         );
     }
 
+    /**
+     * 既存電線の端末を新しい敷設ルートの始点にする。
+     */
+    private static InteractionResult selectReconnectableEndpoint(
+            Level level,
+            Player player,
+            ReconnectHit hit,
+            ResourceLocation selectedWireType
+    ) {
+        WireEntity source = hit.wire();
+
+        if (!source.isAlive()) {
+            return InteractionResult.PASS;
+        }
+
+        ResourceLocation sourceWireType =
+                source.getWireTypeId();
+
+        if (!sourceWireType.equals(selectedWireType)) {
+            player.displayClientMessage(
+                    Component.literal(
+                            "異なる種類の電線には再接続できません。"
+                    ).withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        BlockPos anchor = hit.endpointA()
+                ? source.getEndpointA()
+                : source.getEndpointB();
+
+        EndpointSelection selection =
+                new EndpointSelection(
+                        anchor,
+                        hit.position(),
+                        null,
+                        sourceWireType
+                );
+
+        RouteState existingRoute =
+                ROUTES.get(player.getUUID());
+
+        // 既に敷設中なら、通常の終点として扱う。
+        if (existingRoute != null) {
+            return finishRoute(
+                    level,
+                    player,
+                    existingRoute,
+                    selection,
+                    false
+            );
+        }
+
+        RouteState route = new RouteState(selection);
+
+        route.reconnectSource = source;
+        route.reconnectSourceA = hit.endpointA();
+
+        ROUTES.put(player.getUUID(), route);
+
+        player.displayClientMessage(
+                Component.literal(
+                        "既存電線の端末を始点にしました。次の接続先を選択してください。"
+                ).withStyle(ChatFormatting.YELLOW),
+                true
+        );
+
+        return InteractionResult.SUCCESS;
+    }
+
     private static InteractionResult finishRoute(
             Level level,
             Player player,
@@ -862,6 +1045,28 @@ public class WireItem extends Item {
             boolean endIsInsulator
     ) {
         EndpointSelection start = route.start;
+
+        // 再接続元の電線がまだ有効か確認する。
+        if (route.reconnectSource != null) {
+            WireEntity source = route.reconnectSource;
+
+            boolean stillReconnectable =
+                    source.isAlive()
+                            && (route.reconnectSourceA
+                            ? source.isReconnectableA()
+                            : source.isReconnectableB());
+
+            if (!stillReconnectable) {
+                player.displayClientMessage(
+                        Component.literal(
+                                "再接続元の電線端末が無効になっています。"
+                        ).withStyle(ChatFormatting.RED),
+                        true
+                );
+
+                return InteractionResult.SUCCESS;
+            }
+        }
 
         if (start.position().distanceToSqr(end.position())
                 < 1.0E-8) {
@@ -988,6 +1193,13 @@ public class WireItem extends Item {
                 start.wireTypeId()
         );
 
+        // 再接続の場合は既存電線のNetworkIdを引き継ぐ。
+        if (route.reconnectSource != null) {
+            wire.setNetworkId(
+                    route.reconnectSource.getNetworkId()
+            );
+        }
+
         // 碍子を端点として使用した場合、端末状態を設定
         if (level.getBlockState(start.anchor()).getBlock()
                 instanceof InsulatorBlock) {
@@ -1100,6 +1312,16 @@ public class WireItem extends Item {
                 if (entity instanceof WireBranchConnectorEntity branch) {
                     wire.attachEndpointBToBranch(branch);
                 }
+            }
+        }
+
+        // 新しい電線の生成・支持登録が成功した後にだけ、
+// 元の電線の端末状態を解除する。
+        if (route.reconnectSource != null) {
+            if (route.reconnectSourceA) {
+                route.reconnectSource.clearTerminalA();
+            } else {
+                route.reconnectSource.clearTerminalB();
             }
         }
 
