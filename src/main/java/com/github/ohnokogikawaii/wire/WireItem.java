@@ -23,6 +23,8 @@ import net.minecraft.world.phys.Vec3;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import com.github.ohnokogikawaii.insulator.InsulatorBlock;
+import com.github.ohnokogikawaii.insulator.InsulatorBlockEntity;
 
 public class WireItem extends Item {
 
@@ -78,6 +80,23 @@ public class WireItem extends Item {
 
         BlockPos clickedPos = context.getClickedPos().immutable();
 
+        // 碍子の場合は通常の端子接続ではなく、支持点の操作を行う。
+        if (level.getBlockState(clickedPos).getBlock()
+                instanceof InsulatorBlock insulator) {
+
+            if (level.isClientSide) {
+                return InteractionResult.SUCCESS;
+            }
+
+            return handleInsulatorSupport(
+                    level,
+                    player,
+                    clickedPos,
+                    insulator
+            );
+        }
+
+        // 以下は従来の端子接続処理。
         if (!(level.getBlockState(clickedPos).getBlock()
                 instanceof WireConnectionPointProvider provider)) {
             return InteractionResult.PASS;
@@ -110,6 +129,193 @@ public class WireItem extends Item {
                         wireTypeId
                 )
         );
+    }
+
+    /**
+     * 固定式碍子への電線支持登録・解除。
+     */
+    private InteractionResult handleInsulatorSupport(
+            Level level,
+            Player player,
+            BlockPos insulatorPos,
+            InsulatorBlock insulator
+    ) {
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return InteractionResult.PASS;
+        }
+
+        if (!(level.getBlockEntity(insulatorPos)
+                instanceof InsulatorBlockEntity insulatorEntity)) {
+            player.displayClientMessage(
+                    Component.literal("碍子の管理データを取得できません。")
+                            .withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.FAIL;
+        }
+
+        /*
+         * 既に登録されている電線があれば解除する。
+         * 電線本体や電気的接続は削除しない。
+         */
+        for (UUID wireId :
+                insulatorEntity.getSupportedWireIds()) {
+
+            Entity entity = serverLevel.getEntity(wireId);
+
+            if (entity instanceof WireEntity wire
+                    && wire.isAlive()
+                    && wire.removeSupportPoint(insulatorPos)) {
+
+                insulatorEntity.removeSupportedWire(wireId);
+
+                player.displayClientMessage(
+                        Component.literal("碍子の電線支持を解除しました。")
+                                .withStyle(ChatFormatting.YELLOW),
+                        true
+                );
+
+                return InteractionResult.SUCCESS;
+            }
+        }
+
+        // 支持可能本数を確認する。
+        if (!insulatorEntity.canSupportMoreWires()) {
+            player.displayClientMessage(
+                    Component.literal("この碍子は既に2本の電線を支持しています。")
+                            .withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        Vec3 supportPosition = insulator.getSupportPosition(
+                level.getBlockState(insulatorPos),
+                insulatorPos
+        );
+
+        WireEntity targetWire = findWireForSupport(
+                level,
+                supportPosition
+        );
+
+        if (targetWire == null) {
+            player.displayClientMessage(
+                    Component.literal("碍子の支持位置に電線がありません。")
+                            .withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        UUID wireId = targetWire.getUUID();
+
+        // 電線側に支持点を追加する。
+        if (!targetWire.addSupportPoint(
+                insulatorPos,
+                supportPosition
+        )) {
+            player.displayClientMessage(
+                    Component.literal("この電線には支持点を追加できません。")
+                            .withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        // 碍子側にも電線UUIDを保存する。
+        if (!insulatorEntity.addSupportedWire(wireId)) {
+            targetWire.removeSupportPoint(insulatorPos);
+
+            player.displayClientMessage(
+                    Component.literal("碍子への電線登録に失敗しました。")
+                            .withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        player.displayClientMessage(
+                Component.literal("碍子に電線を固定しました。")
+                        .withStyle(ChatFormatting.GREEN),
+                true
+        );
+
+        return InteractionResult.SUCCESS;
+    }
+
+    /**
+     * 碍子の支持位置を通過している電線を検索する。
+     *
+     * 電線のA-B間の曲線に対して最も近い位置を調べる。
+     * 端点付近は支持点として使用しない。
+     */
+    private WireEntity findWireForSupport(
+            Level level,
+            Vec3 supportPosition
+    ) {
+        final double MAX_DISTANCE = 0.45;
+        final double MIN_T = 0.02;
+        final double MAX_T = 0.98;
+        final double SEARCH_RADIUS = 64.0;
+
+        AABB searchArea = new AABB(
+                supportPosition,
+                supportPosition
+        ).inflate(SEARCH_RADIUS);
+
+        WireEntity bestWire = null;
+        double bestDistance = MAX_DISTANCE;
+
+        for (WireEntity wire : level.getEntitiesOfClass(
+                WireEntity.class,
+                searchArea,
+                Entity::isAlive
+        )) {
+            Vec3 a = wire.getEndpointAWorldPosition();
+            Vec3 b = wire.getEndpointBWorldPosition();
+
+            Vec3 direction = b.subtract(a);
+            double lengthSquared = direction.lengthSqr();
+
+            if (lengthSquared < 1.0E-8) {
+                continue;
+            }
+
+            double t = supportPosition.subtract(a)
+                    .dot(direction) / lengthSquared;
+
+            if (t < MIN_T || t > MAX_T) {
+                continue;
+            }
+
+            WireType type = wire.getWireType();
+
+            boolean canSag = type != null && type.canSag();
+
+            Vec3 nearestPoint = WireBranchGeometry.pointOnWire(
+                    a,
+                    b,
+                    t,
+                    canSag
+            );
+
+            double distance = supportPosition.distanceTo(nearestPoint);
+
+            if (distance > bestDistance) {
+                continue;
+            }
+
+            bestDistance = distance;
+            bestWire = wire;
+        }
+
+        return bestWire;
     }
 
     /**
