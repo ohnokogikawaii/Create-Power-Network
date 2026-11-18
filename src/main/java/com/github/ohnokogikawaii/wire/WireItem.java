@@ -77,6 +77,27 @@ public class WireItem extends Item {
         if (player == null) {
             return InteractionResult.PASS;
         }
+        // シフト右クリックで接続選択をキャンセル
+        if (player.isShiftKeyDown()) {
+            if (level.isClientSide) {
+                return InteractionResult.SUCCESS;
+            }
+
+            boolean cancelled = FIRST_ENDPOINTS.remove(player.getUUID()) != null;
+
+            player.displayClientMessage(
+                    Component.literal(
+                            cancelled
+                                    ? "電線の接続選択をキャンセルしました。"
+                                    : "キャンセルできる接続選択はありません。"
+                    ).withStyle(
+                            cancelled ? ChatFormatting.YELLOW : ChatFormatting.GRAY
+                    ),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
 
         BlockPos clickedPos = context.getClickedPos().immutable();
 
@@ -329,6 +350,27 @@ public class WireItem extends Item {
             InteractionHand hand
     ) {
         ItemStack stack = player.getItemInHand(hand);
+        // シフト右クリックで接続選択をキャンセル
+        if (player.isShiftKeyDown()) {
+            if (level.isClientSide) {
+                return InteractionResultHolder.sidedSuccess(stack, true);
+            }
+
+            boolean cancelled = FIRST_ENDPOINTS.remove(player.getUUID()) != null;
+
+            player.displayClientMessage(
+                    Component.literal(
+                            cancelled
+                                    ? "電線の接続選択をキャンセルしました。"
+                                    : "キャンセルできる接続選択はありません。"
+                    ).withStyle(
+                            cancelled ? ChatFormatting.YELLOW : ChatFormatting.GRAY
+                    ),
+                    true
+            );
+
+            return InteractionResultHolder.success(stack);
+        }
 
         BranchHit hit = findBranchPortHit(level, player);
 
