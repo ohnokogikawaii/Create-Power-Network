@@ -13,7 +13,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-
+import com.github.ohnokogikawaii.insulator.InsulatorBlockEntity;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -58,14 +58,19 @@ public class WireCutterItem extends Item {
             return InteractionResultHolder.pass(stack);
         }
 
-        // 切断前に UUID を保存する。
-        UUID cutWireUuid = wire.getUUID();
-
         // 親ワイヤーに取り付けられた分岐コネクタを削除する。
-        int removedConnectors = removeConnectorsOnWire(
-                level,
-                wire
-        );
+        removeConnectorsOnWire(level, wire);
+
+        // 碍子側に保存されている支持登録を解除する。
+        for (WireEntity.SupportPoint point :
+                new ArrayList<>(wire.getSupportPoints())) {
+
+            if (level.getBlockEntity(point.insulatorPos())
+                    instanceof InsulatorBlockEntity insulatorEntity) {
+
+                insulatorEntity.removeSupportedWire(wire.getUUID());
+            }
+        }
 
         // 対象ワイヤーを切断する。
         wire.discard();

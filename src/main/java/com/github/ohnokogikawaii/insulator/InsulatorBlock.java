@@ -22,6 +22,10 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
+import com.github.ohnokogikawaii.wire.WireEntity;
+import net.minecraft.server.level.ServerLevel;
+
+import java.util.UUID;
 
 import java.util.List;
 
@@ -279,6 +283,40 @@ public class InsulatorBlock extends BaseEntityBlock
             CollisionContext context
     ) {
         return getShape(state, level, pos, context);
+    }
+
+    /**
+     * 碍子が撤去されたとき、支持している電線から支持点を解除する。
+     *
+     * 電線自体は切断しない。
+     * 未ロードの電線については、WireEntity側で後から検証する。
+     */
+    @Override
+    public void onRemove(
+            BlockState state,
+            Level level,
+            BlockPos pos,
+            BlockState newState,
+            boolean movedByPiston
+    ) {
+        // 同じブロックの状態変化では支持関係を解除しない。
+        if (state.getBlock() != newState.getBlock()
+                && level instanceof ServerLevel serverLevel
+                && level.getBlockEntity(pos)
+                instanceof InsulatorBlockEntity insulatorEntity) {
+
+            for (UUID wireId : insulatorEntity.getSupportedWireIds()) {
+                if (serverLevel.getEntity(wireId)
+                        instanceof WireEntity wire) {
+
+                    wire.removeSupportPoint(pos);
+                }
+            }
+
+            insulatorEntity.clearSupportedWires();
+        }
+
+        super.onRemove(state, level, pos, newState, movedByPiston);
     }
 
     @Override

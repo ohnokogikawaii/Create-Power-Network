@@ -16,7 +16,7 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-
+import com.github.ohnokogikawaii.insulator.InsulatorBlock;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -568,6 +568,10 @@ public class WireEntity extends Entity {
         super.tick();
 
         if (!level().isClientSide()) {
+
+            // 碍子が撤去されている支持点を検証する。
+            removeInvalidSupportPoints();
+
             /*
              * 分岐コネクタに接続されていない通常の端点だけを検証する。
              * チャンク未ロード中はブロック端子の有無を判定しない。
@@ -593,12 +597,35 @@ public class WireEntity extends Entity {
             }
         }
 
-        /*
-         * 先に分岐接続点を更新し、
-         * その後でワイヤー自身の位置を更新する。
-         */
         updateAttachedEndpoints();
         updatePosition();
+    }
+
+    /**
+     * 碍子が撤去された、または別のブロックに置き換わった
+     * 支持点を電線側から削除する。
+     *
+     * チャンク未ロード中は判定せず、次回ロード時に確認する。
+     */
+    private void removeInvalidSupportPoints() {
+        List<SupportPoint> points =
+                new ArrayList<>(getSupportPoints());
+
+        for (SupportPoint point : points) {
+            BlockPos pos = point.insulatorPos();
+
+            // チャンク未ロードなら、まだ判定しない。
+            if (!level().hasChunkAt(pos)) {
+                continue;
+            }
+
+            // 碍子が存在しない場合は支持点を削除する。
+            if (!(level().getBlockState(pos).getBlock()
+                    instanceof InsulatorBlock)) {
+
+                removeSupportPoint(pos);
+            }
+        }
     }
 
     @Override
