@@ -61,19 +61,30 @@ public class InsulatorBlockEntity extends BlockEntity {
         boolean removed = supportedWireIds.remove(wireId);
 
         if (removed) {
-            setChanged();
+            // 支持する電線がなくなった場合は溝方向をリセット
+            if (supportedWireIds.isEmpty()) {
+                grooveYaw = 0.0F;
+                hasGrooveDirection = false;
+            }
+
+            syncBlockEntity();
         }
 
         return removed;
     }
 
     public void clearSupportedWires() {
-        if (supportedWireIds.isEmpty()) {
+        if (supportedWireIds.isEmpty()
+                && !hasGrooveDirection) {
             return;
         }
 
         supportedWireIds.clear();
-        setChanged();
+
+        grooveYaw = 0.0F;
+        hasGrooveDirection = false;
+
+        syncBlockEntity();
     }
 
     public int getSupportedWireCount() {

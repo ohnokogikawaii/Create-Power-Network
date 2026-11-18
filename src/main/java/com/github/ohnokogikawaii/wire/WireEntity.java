@@ -20,6 +20,7 @@ import com.github.ohnokogikawaii.insulator.InsulatorBlock;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import com.github.ohnokogikawaii.insulator.InsulatorBlockEntity;
 
 import java.util.UUID;
 
@@ -964,6 +965,12 @@ public class WireEntity extends Entity {
      * チャンクのアンロードでは支持登録を維持する。
      * 実際に電線が破棄された場合だけ関連データを整理する。
      */
+    /**
+     * 電線が削除される際に、碍子側の支持登録も解除する。
+     *
+     * チャンクのアンロードでは支持登録を維持する。
+     * 実際に電線が破棄された場合だけ関連データを整理する。
+     */
     @Override
     public void remove(RemovalReason reason) {
 
@@ -973,18 +980,39 @@ public class WireEntity extends Entity {
 
             UUID wireId = getUUID();
 
+            /*
+             * 始点・終点の碍子登録を解除する。
+             *
+             * チャンクが未ロードの場合はアクセスしない。
+             */
+            for (BlockPos endpoint :
+                    List.of(getEndpointA(), getEndpointB())) {
+
+                if (!level().hasChunkAt(endpoint)) {
+                    continue;
+                }
+
+                if (level().getBlockEntity(endpoint)
+                        instanceof InsulatorBlockEntity insulatorEntity) {
+
+                    insulatorEntity.removeSupportedWire(wireId);
+                }
+            }
+
+            /*
+             * 中間支持点の碍子登録を解除する。
+             */
             for (SupportPoint point :
                     new ArrayList<>(getSupportPoints())) {
 
                 BlockPos insulatorPos = point.insulatorPos();
 
-                // 碍子のチャンクが読み込まれている場合だけ処理する。
                 if (!level().hasChunkAt(insulatorPos)) {
                     continue;
                 }
 
                 if (level().getBlockEntity(insulatorPos)
-                        instanceof com.github.ohnokogikawaii.insulator.InsulatorBlockEntity insulatorEntity) {
+                        instanceof InsulatorBlockEntity insulatorEntity) {
 
                     insulatorEntity.removeSupportedWire(wireId);
                 }
