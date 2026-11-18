@@ -14,6 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class WireEntityRenderer extends EntityRenderer<WireEntity> {
@@ -27,6 +28,8 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
     // 仮の標準余長。直線距離に対して2%長いワイヤーとして垂れを計算する。
     // 実際の設置長を導入した段階で、その値から垂れを計算する方式に変更する。
     private static final double DEFAULT_SLACK_RATIO = 1.005;
+
+    private record PathPoint(double t, Vec3 position) {}
 
     public WireEntityRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -42,10 +45,12 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
             int packedLight
     ) {
         Vec3 origin = entity.getPosition(partialTick);
+
         Vec3 a = entity.getEndpointAPosition().subtract(origin);
         Vec3 b = entity.getEndpointBPosition().subtract(origin);
 
         double chordLength = a.distanceTo(b);
+
         if (chordLength < 1.0E-8) {
             return;
         }
@@ -53,33 +58,43 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
         WireType wireType = entity.getWireType();
 
         double radius = wireType.getRenderThickness() / 2.0;
+
         if (radius <= 0.0) {
             return;
         }
 
-        double sag = wireType.canSag()
-                ? calculateSag(a, b, chordLength)
-                : 0.0;
-
-        List<Vec3> centers =
-                createCenterline(a, b, sag, chordLength);
+        /*
+         * A・B間にある支持点を含めた中心線を生成する。
+         */
+        List<Vec3> centers = createSupportedCenterline(
+                entity,
+                a,
+                b,
+                origin,
+                wireType.canSag()
+        );
 
         if (centers.size() < 2) {
             return;
         }
 
         ResourceLocation texture = getTextureLocation(entity);
+
         VertexConsumer buffer = bufferSource.getBuffer(
                 RenderType.entityCutoutNoCull(texture)
         );
 
         PoseStack.Pose pose = poseStack.last();
 
+        /*
+         * 中心線に沿って円形の電線メッシュを生成する。
+         */
         for (int segment = 0; segment < centers.size() - 1; segment++) {
             Vec3 startCenter = centers.get(segment);
             Vec3 endCenter = centers.get(segment + 1);
 
             double segmentLength = startCenter.distanceTo(endCenter);
+
             if (segmentLength < 1.0E-8) {
                 continue;
             }
@@ -93,6 +108,7 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
 
             Vec3 sideStart =
                     tangentStart.cross(referenceStart).normalize();
+
             Vec3 upStart =
                     tangentStart.cross(sideStart).normalize();
 
@@ -102,10 +118,12 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
 
             Vec3 sideEnd =
                     tangentEnd.cross(referenceEnd).normalize();
+
             Vec3 upEnd =
                     tangentEnd.cross(sideEnd).normalize();
 
             float u0 = 0.0F;
+
             float u1 = (float) Math.min(
                     1.0,
                     segmentLength / TEXTURE_REPEAT_LENGTH
@@ -114,40 +132,159 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
             for (int radial = 0; radial < RADIAL_SEGMENTS; radial++) {
                 double angle0 =
                         2.0 * Math.PI * radial / RADIAL_SEGMENTS;
+
                 double angle1 =
                         2.0 * Math.PI * (radial + 1) / RADIAL_SEGMENTS;
 
                 Vec3 normalStart0 =
                         ringNormal(sideStart, upStart, angle0);
+
                 Vec3 normalStart1 =
                         ringNormal(sideStart, upStart, angle1);
+
                 Vec3 normalEnd0 =
                         ringNormal(sideEnd, upEnd, angle0);
+
                 Vec3 normalEnd1 =
                         ringNormal(sideEnd, upEnd, angle1);
 
-                Vec3 a0 = startCenter.add(normalStart0.scale(radius));
-                Vec3 a1 = startCenter.add(normalStart1.scale(radius));
-                Vec3 b0 = endCenter.add(normalEnd0.scale(radius));
-                Vec3 b1 = endCenter.add(normalEnd1.scale(radius));
+                Vec3 a0 = startCenter.add(
+                        normalStart0.scale(radius)
+                );
+
+                Vec3 a1 = startCenter.add(
+                        normalStart1.scale(radius)
+                );
+
+                Vec3 b0 = endCenter.add(
+                        normalEnd0.scale(radius)
+                );
+
+                Vec3 b1 = endCenter.add(
+                        normalEnd1.scale(radius)
+                );
 
                 float v0 = (float) radial / RADIAL_SEGMENTS;
                 float v1 = (float) (radial + 1) / RADIAL_SEGMENTS;
 
-                addVertex(buffer, pose, a0, normalStart0,
-                        u0, v0, packedLight);
-                addVertex(buffer, pose, a1, normalStart1,
-                        u0, v1, packedLight);
-                addVertex(buffer, pose, b1, normalEnd1,
-                        u1, v1, packedLight);
-                addVertex(buffer, pose, b0, normalEnd0,
-                        u1, v0, packedLight);
+                addVertex(
+                        buffer, pose, a0, normalStart0,
+                        u0, v0, packedLight
+                );
+
+                addVertex(
+                        buffer, pose, a1, normalStart1,
+                        u0, v1, packedLight
+                );
+
+                addVertex(
+                        buffer, pose, b1, normalEnd1,
+                        u1, v1, packedLight
+                );
+
+                addVertex(
+                        buffer, pose, b0, normalEnd0,
+                        u1, v0, packedLight
+                );
             }
         }
     }
 
     /**
-     * 目標とするワイヤー長になるように、放物線の垂れ量を二分探索する。
+     * 支持点を通る中心線を生成する。
+     *
+     * 電気的な接続はA-Bのまま維持し、
+     * 描画上だけ支持点ごとに区間を分割する。
+     */
+    private static List<Vec3> createSupportedCenterline(
+            WireEntity entity,
+            Vec3 a,
+            Vec3 b,
+            Vec3 origin,
+            boolean canSag
+    ) {
+        Vec3 direction = b.subtract(a);
+
+        double lengthSquared = direction.lengthSqr();
+
+        if (lengthSquared < 1.0E-8) {
+            return List.of(a, b);
+        }
+
+        List<PathPoint> pathPoints = new ArrayList<>();
+
+        pathPoints.add(new PathPoint(0.0, a));
+
+        /*
+         * 支持点をA-B間の位置に変換する。
+         * 登録順ではなく、AからBへの投影距離で並べる。
+         */
+        for (WireEntity.SupportPoint support :
+                entity.getSupportPoints()) {
+
+            Vec3 position = support.position().subtract(origin);
+
+            double t = position.subtract(a)
+                    .dot(direction) / lengthSquared;
+
+            /*
+             * Aより前、Bより後ろの点は除外する。
+             */
+            if (t <= 0.0 || t >= 1.0) {
+                continue;
+            }
+
+            pathPoints.add(new PathPoint(t, position));
+        }
+
+        pathPoints.add(new PathPoint(1.0, b));
+
+        pathPoints.sort(
+                Comparator.comparingDouble(PathPoint::t)
+        );
+
+        List<Vec3> result = new ArrayList<>();
+
+        /*
+         * 各支持点間を独立した垂れ曲線で接続する。
+         */
+        for (int i = 0; i < pathPoints.size() - 1; i++) {
+            Vec3 start = pathPoints.get(i).position();
+            Vec3 end = pathPoints.get(i + 1).position();
+
+            double spanLength = start.distanceTo(end);
+
+            if (spanLength < 1.0E-8) {
+                continue;
+            }
+
+            double sag = canSag
+                    ? calculateSag(start, end, spanLength)
+                    : 0.0;
+
+            List<Vec3> span = createCenterline(
+                    start,
+                    end,
+                    sag,
+                    spanLength
+            );
+
+            /*
+             * 前区間の終点と次区間の始点が重複しないようにする。
+             */
+            int startIndex = result.isEmpty() ? 0 : 1;
+
+            for (int j = startIndex; j < span.size(); j++) {
+                result.add(span.get(j));
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 目標とするワイヤー長になるように、
+     * 放物線の垂れ量を二分探索する。
      */
     private static double calculateSag(
             Vec3 a,
@@ -159,19 +296,26 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                         + Math.pow(b.z - a.z, 2)
         );
 
-        // 垂直に近い配線は不自然に横へ垂れさせない。
-        if (horizontalSpan < 1.0E-4 || chordLength < 1.0E-4) {
+        if (horizontalSpan < 1.0E-4
+                || chordLength < 1.0E-4) {
             return 0.0;
         }
 
-        double targetLength = chordLength * DEFAULT_SLACK_RATIO;
+        double targetLength =
+                chordLength * DEFAULT_SLACK_RATIO;
+
         double low = 0.0;
         double high = Math.max(0.05, horizontalSpan);
 
         for (int i = 0; i < 32; i++) {
             double mid = (low + high) * 0.5;
-            double curveLength =
-                    estimateCurveLength(a, b, mid, 64);
+
+            double curveLength = estimateCurveLength(
+                    a,
+                    b,
+                    mid,
+                    64
+            );
 
             if (curveLength < targetLength) {
                 low = mid;
@@ -190,11 +334,15 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
             int samples
     ) {
         Vec3 previous = curvePoint(a, b, sag, 0.0);
+
         double length = 0.0;
 
         for (int i = 1; i <= samples; i++) {
             Vec3 current = curvePoint(
-                    a, b, sag, (double) i / samples
+                    a,
+                    b,
+                    sag,
+                    (double) i / samples
             );
 
             length += previous.distanceTo(current);
@@ -222,7 +370,12 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
 
         for (int i = 0; i <= segments; i++) {
             points.add(
-                    curvePoint(a, b, sag, (double) i / segments)
+                    curvePoint(
+                            a,
+                            b,
+                            sag,
+                            (double) i / segments
+                    )
             );
         }
 
@@ -230,7 +383,7 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
     }
 
     /**
-     * 両端を結ぶ直線から、中央が下がる放物線を作る。
+     * 両端を結ぶ直線から中央が下がる放物線を作る。
      */
     private static Vec3 curvePoint(
             Vec3 a,
@@ -239,9 +392,15 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
             double t
     ) {
         Vec3 linear = a.lerp(b, t);
-        double verticalOffset = -4.0 * sag * t * (1.0 - t);
 
-        return linear.add(0.0, verticalOffset, 0.0);
+        double verticalOffset =
+                -4.0 * sag * t * (1.0 - t);
+
+        return linear.add(
+                0.0,
+                verticalOffset,
+                0.0
+        );
     }
 
     private static Vec3 getTangent(
@@ -251,7 +410,8 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
         Vec3 tangent;
 
         if (index == 0) {
-            tangent = points.get(1).subtract(points.get(0));
+            tangent = points.get(1)
+                    .subtract(points.get(0));
         } else if (index == points.size() - 1) {
             tangent = points.get(index)
                     .subtract(points.get(index - 1));
@@ -302,7 +462,8 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
 
     @Override
     public ResourceLocation getTextureLocation(WireEntity entity) {
-        ResourceLocation texture = entity.getWireType().getTexture();
+        ResourceLocation texture =
+                entity.getWireType().getTexture();
 
         return ResourceLocation.fromNamespaceAndPath(
                 texture.getNamespace(),
