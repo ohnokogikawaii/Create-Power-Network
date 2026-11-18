@@ -24,6 +24,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.RenderShape;
 
 import java.util.UUID;
 
@@ -192,6 +193,11 @@ public class InsulatorBlock extends BaseEntityBlock
             );
             default -> p;
         };
+    }
+
+    @Override
+    public RenderShape getRenderShape(BlockState state) {
+        return RenderShape.MODEL;
     }
 
     private VoxelShape getBaseShape() {
