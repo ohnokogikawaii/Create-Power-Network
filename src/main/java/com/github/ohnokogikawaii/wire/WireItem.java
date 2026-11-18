@@ -209,13 +209,18 @@ public class WireItem extends Item {
 
         RouteState route = ROUTES.get(playerId);
 
+        // クリック判定は延長位置だが、
+// 新しい電線は元の端点から接続する。
+        Vec3 actualEndpoint = hit.endpointA()
+                ? source.getEndpointAWorldPosition()
+                : source.getEndpointBWorldPosition();
+
         EndpointSelection selection =
                 new EndpointSelection(
-                        pos,
-                        position,
+                        anchor,
+                        actualEndpoint,
                         null,
-                        ((WireItem) player.getMainHandItem().getItem())
-                                .getWireTypeId()
+                        sourceWireType
                 );
 
         // まだ敷設を開始していない場合
@@ -931,9 +936,11 @@ public class WireItem extends Item {
                     continue;
                 }
 
-                Vec3 position = endpointA
-                        ? wire.getEndpointAWorldPosition()
-                        : wire.getEndpointBWorldPosition();
+                // 実際の端点から電線の延長線上に0.5ブロック移動
+                Vec3 position = getReconnectPosition(
+                        wire,
+                        endpointA
+                );
 
                 Vec3 fromEye = position.subtract(eye);
 
