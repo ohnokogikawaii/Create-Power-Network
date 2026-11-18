@@ -800,6 +800,50 @@ public class WireItem extends Item {
     }
 
     /**
+     * 再接続用の仮想接続位置を取得する。
+     *
+     * A端点：電線の進行方向と反対側へ延長する。
+     * B端点：電線の進行方向へ延長する。
+     *
+     * 実際の電線端点座標は変更しない。
+     */
+    private static Vec3 getReconnectPosition(
+            WireEntity wire,
+            boolean endpointA
+    ) {
+        Vec3 a = wire.getEndpointAWorldPosition();
+        Vec3 b = wire.getEndpointBWorldPosition();
+
+        WireType type = wire.getWireType();
+        boolean canSag = type != null && type.canSag();
+
+        // 端点付近の接線を取得
+        double t = endpointA ? 0.001 : 0.999;
+
+        Vec3 tangent = WireBranchGeometry.tangent(
+                a,
+                b,
+                t,
+                canSag
+        );
+
+        if (tangent.lengthSqr() < 1.0E-8) {
+            return endpointA ? a : b;
+        }
+
+        tangent = tangent.normalize();
+
+        // Aは電線の進行方向と逆、Bは進行方向へ延長
+        Vec3 outward = endpointA
+                ? tangent.scale(-1.0)
+                : tangent;
+
+        return (endpointA ? a : b).add(
+                outward.scale(0.5)
+        );
+    }
+
+    /**
      * 視線と分岐ポート C の距離を計算し、
      * 最も狙いやすいポートを取得する。
      */
