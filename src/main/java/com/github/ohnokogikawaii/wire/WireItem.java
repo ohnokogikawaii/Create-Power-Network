@@ -339,14 +339,20 @@ public class WireItem extends Item {
      * 電線のA-B間の曲線に対して最も近い位置を調べる。
      * 端点付近は支持点として使用しない。
      */
+
     private SupportCandidate findWireForSupport(
             Level level,
             Vec3 supportPosition
     ) {
-        final double MAX_DISTANCE = 0.45;
+        // 支持位置と電線の最大許容距離
+        final double MAX_DISTANCE = 0.75;
+
+        // 電線の端点付近は支持点にしない
         final double MIN_T = 0.02;
         final double MAX_T = 0.98;
+
         final double SEARCH_RADIUS = 64.0;
+        final int SAMPLES = 256;
 
         AABB searchArea = new AABB(
                 supportPosition,
@@ -364,23 +370,77 @@ public class WireItem extends Item {
             Vec3 a = wire.getEndpointAWorldPosition();
             Vec3 b = wire.getEndpointBWorldPosition();
 
-            Vec3 direction = b.subtract(a);
-            double lengthSquared = direction.lengthSqr();
-
-            if (lengthSquared < 1.0E-8) {
-                continue;
-            }
-
-            double t = supportPosition.subtract(a)
-                    .dot(direction) / lengthSquared;
-
-            if (t < MIN_T || t > MAX_T) {
+            if (a.distanceToSqr(b) < 1.0E-8) {
                 continue;
             }
 
             WireType type = wire.getWireType();
-
             boolean canSag = type != null && type.canSag();
+
+            /*
+             * 電線の曲線を直接調べる。
+             * A-Bの直線投影ではなく、実際の曲線上で
+             * 支持位置に最も近い場所を検索する。
+             */
+            double bestT = -1.0;
+            double localBestDistance = Double.MAX_VALUE;
+
+            for (int i = 1; i < SAMPLES; i++) {
+                double t = (double) i / SAMPLES;
+
+                Vec3 point = WireBranchGeometry.pointOnWire(
+                        a,
+                        b,
+                        t,
+                        canSag
+                );
+
+                double distance = supportPosition.distanceTo(point);
+
+                if (distance < localBestDistance) {
+                    localBestDistance = distance;
+                    bestT = t;
+                }
+            }
+
+            if (bestT < 0.0) {
+                continue;
+            }
+
+            /*
+             * 最も近かった位置の周辺をさらに細かく検索する。
+             */
+            double range = 1.0 / SAMPLES;
+            double low = Math.max(MIN_T, bestT - range);
+            double high = Math.min(MAX_T, bestT + range);
+
+            for (int i = 0; i < 24; i++) {
+                double t1 = low + (high - low) / 3.0;
+                double t2 = high - (high - low) / 3.0;
+
+                Vec3 p1 = WireBranchGeometry.pointOnWire(
+                        a, b, t1, canSag
+                );
+
+                Vec3 p2 = WireBranchGeometry.pointOnWire(
+                        a, b, t2, canSag
+                );
+
+                double d1 = supportPosition.distanceToSqr(p1);
+                double d2 = supportPosition.distanceToSqr(p2);
+
+                if (d1 < d2) {
+                    high = t2;
+                } else {
+                    low = t1;
+                }
+            }
+
+            double t = (low + high) * 0.5;
+
+            if (t < MIN_T || t > MAX_T) {
+                continue;
+            }
 
             Vec3 nearestPoint = WireBranchGeometry.pointOnWire(
                     a,
@@ -395,6 +455,9 @@ public class WireItem extends Item {
                 continue;
             }
 
+            /*
+             * 支持位置における電線の接線方向を取得する。
+             */
             Vec3 tangent = WireBranchGeometry.tangent(
                     a,
                     b,
@@ -402,7 +465,6 @@ public class WireItem extends Item {
                     canSag
             );
 
-            // 溝は水平面内で回転するため、Y成分を除外する。
             Vec3 horizontalTangent = new Vec3(
                     tangent.x,
                     0.0,
@@ -434,6 +496,7 @@ public class WireItem extends Item {
 
         return bestCandidate;
     }
+
 
     /**
      * ブロックを直接クリックしなかった場合は、
