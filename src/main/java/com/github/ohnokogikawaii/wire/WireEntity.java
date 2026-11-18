@@ -891,6 +891,7 @@ public class WireEntity extends Entity {
                 tag.getBoolean("ReconnectableB")
         );
 
+
         syncSupportPoints(supportPoints);
 
         updatePosition();
