@@ -30,6 +30,8 @@ public class WireItem extends Item {
 
     private static final double REACH = 6.0;
     private static final double PORT_HIT_DISTANCE = 0.38;
+    private static final double MAX_GROOVE_ANGLE_DIFFERENCE = 5.0;
+
 
     private record EndpointSelection(
             BlockPos anchor,
@@ -43,6 +45,13 @@ public class WireItem extends Item {
             Vec3 position,
             double distanceToRay,
             double distanceAlongRay
+    ) {}
+
+    private record SupportCandidate(
+            WireEntity wire,
+            double t,
+            float yaw,
+            Vec3 tangent
     ) {}
 
     private static final Map<UUID, EndpointSelection> FIRST_ENDPOINTS =
@@ -217,10 +226,45 @@ public class WireItem extends Item {
                 insulatorPos
         );
 
-        WireEntity targetWire = findWireForSupport(
+        SupportCandidate candidate = findWireForSupport(
                 level,
                 supportPosition
         );
+
+        if (candidate == null) {
+            player.displayClientMessage(
+                    Component.literal("碍子の支持位置に電線がありません。")
+                            .withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        WireEntity targetWire = candidate.wire();
+
+// 既に溝の方向が決まっている場合、2本目の電線の角度を検証する。
+        if (insulatorEntity.hasGrooveDirection()) {
+            double angleDifference = axisAngleDifference(
+                    insulatorEntity.getGrooveYaw(),
+                    candidate.yaw()
+            );
+
+            if (angleDifference > MAX_GROOVE_ANGLE_DIFFERENCE) {
+                player.displayClientMessage(
+                        Component.literal(
+                                String.format(
+                                        "電線の角度が溝と合いません。差: %.1f度（許容: %.1f度）",
+                                        angleDifference,
+                                        MAX_GROOVE_ANGLE_DIFFERENCE
+                                )
+                        ).withStyle(ChatFormatting.RED),
+                        true
+                );
+
+                return InteractionResult.SUCCESS;
+            }
+        }
 
         if (targetWire == null) {
             player.displayClientMessage(
@@ -261,6 +305,11 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
+        // 最初の電線なら、その方向を溝の基準角度にする。
+        if (!insulatorEntity.hasGrooveDirection()) {
+            insulatorEntity.setGrooveYaw(candidate.yaw());
+        }
+
         player.displayClientMessage(
                 Component.literal("碍子に電線を固定しました。")
                         .withStyle(ChatFormatting.GREEN),
@@ -270,13 +319,27 @@ public class WireItem extends Item {
         return InteractionResult.SUCCESS;
     }
 
+    private static double axisAngleDifference(
+            double angleA,
+            double angleB
+    ) {
+        double difference = Math.abs(angleA - angleB);
+
+        difference %= 180.0;
+
+        return Math.min(
+                difference,
+                180.0 - difference
+        );
+    }
+
     /**
      * 碍子の支持位置を通過している電線を検索する。
      *
      * 電線のA-B間の曲線に対して最も近い位置を調べる。
      * 端点付近は支持点として使用しない。
      */
-    private WireEntity findWireForSupport(
+    private SupportCandidate findWireForSupport(
             Level level,
             Vec3 supportPosition
     ) {
@@ -290,7 +353,7 @@ public class WireItem extends Item {
                 supportPosition
         ).inflate(SEARCH_RADIUS);
 
-        WireEntity bestWire = null;
+        SupportCandidate bestCandidate = null;
         double bestDistance = MAX_DISTANCE;
 
         for (WireEntity wire : level.getEntitiesOfClass(
@@ -332,11 +395,44 @@ public class WireItem extends Item {
                 continue;
             }
 
+            Vec3 tangent = WireBranchGeometry.tangent(
+                    a,
+                    b,
+                    t,
+                    canSag
+            );
+
+            // 溝は水平面内で回転するため、Y成分を除外する。
+            Vec3 horizontalTangent = new Vec3(
+                    tangent.x,
+                    0.0,
+                    tangent.z
+            );
+
+            if (horizontalTangent.lengthSqr() < 1.0E-8) {
+                continue;
+            }
+
+            horizontalTangent = horizontalTangent.normalize();
+
+            float yaw = (float) Math.toDegrees(
+                    Math.atan2(
+                            horizontalTangent.z,
+                            horizontalTangent.x
+                    )
+            );
+
             bestDistance = distance;
-            bestWire = wire;
+
+            bestCandidate = new SupportCandidate(
+                    wire,
+                    t,
+                    yaw,
+                    horizontalTangent
+            );
         }
 
-        return bestWire;
+        return bestCandidate;
     }
 
     /**
