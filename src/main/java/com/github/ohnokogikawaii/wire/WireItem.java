@@ -19,7 +19,8 @@ import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -54,7 +55,27 @@ public class WireItem extends Item {
             Vec3 tangent
     ) {}
 
-    private static final Map<UUID, EndpointSelection> FIRST_ENDPOINTS =
+    private record InsulatorSelection(
+            BlockPos pos,
+            Vec3 position
+    ) {}
+
+    private static final class RouteState {
+
+        private final EndpointSelection start;
+
+        private final List<InsulatorSelection> supports =
+                new ArrayList<>();
+
+        private BlockPos lastInsulatorPos;
+        private Vec3 lastInsulatorPosition;
+
+        private RouteState(EndpointSelection start) {
+            this.start = start;
+        }
+    }
+
+    private static final Map<UUID, RouteState> ROUTES =
             new ConcurrentHashMap<>();
 
     private final ResourceLocation wireTypeId;
@@ -86,21 +107,24 @@ public class WireItem extends Item {
         if (player == null) {
             return InteractionResult.PASS;
         }
-        // シフト右クリックで接続選択をキャンセル
+
         if (player.isShiftKeyDown()) {
             if (level.isClientSide) {
                 return InteractionResult.SUCCESS;
             }
 
-            boolean cancelled = FIRST_ENDPOINTS.remove(player.getUUID()) != null;
+            boolean cancelled =
+                    ROUTES.remove(player.getUUID()) != null;
 
             player.displayClientMessage(
                     Component.literal(
                             cancelled
-                                    ? "電線の接続選択をキャンセルしました。"
-                                    : "キャンセルできる接続選択はありません。"
+                                    ? "電線の敷設をキャンセルしました。"
+                                    : "キャンセルできる敷設はありません。"
                     ).withStyle(
-                            cancelled ? ChatFormatting.YELLOW : ChatFormatting.GRAY
+                            cancelled
+                                    ? ChatFormatting.YELLOW
+                                    : ChatFormatting.GRAY
                     ),
                     true
             );
@@ -108,31 +132,35 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        BlockPos clickedPos = context.getClickedPos().immutable();
+        BlockPos clickedPos =
+                context.getClickedPos().immutable();
 
-        // 碍子の場合は通常の端子接続ではなく、支持点の操作を行う。
-        if (level.getBlockState(clickedPos).getBlock()
-                instanceof InsulatorBlock insulator) {
+        var state = level.getBlockState(clickedPos);
 
+        // 碍子は敷設ルートの始点・中間点・終点として扱う。
+        if (state.getBlock() instanceof InsulatorBlock insulator) {
             if (level.isClientSide) {
                 return InteractionResult.SUCCESS;
             }
 
-            return handleInsulatorSupport(
+            Vec3 position = insulator.getSupportPosition(
+                    state,
+                    clickedPos
+            );
+
+            return selectInsulator(
                     level,
                     player,
                     clickedPos,
-                    insulator
+                    position
             );
         }
 
-        // 以下は従来の端子接続処理。
-        if (!(level.getBlockState(clickedPos).getBlock()
+        // 通常の接続端子
+        if (!(state.getBlock()
                 instanceof WireConnectionPointProvider provider)) {
             return InteractionResult.PASS;
         }
-
-        var state = level.getBlockState(clickedPos);
 
         WireConnectionPointProvider.ConnectionPoint point =
                 provider.getNearestConnectionPoint(
@@ -158,6 +186,153 @@ public class WireItem extends Item {
                         null,
                         wireTypeId
                 )
+        );
+    }
+
+    private static InteractionResult selectInsulator(
+            Level level,
+            Player player,
+            BlockPos pos,
+            Vec3 position
+    ) {
+        UUID playerId = player.getUUID();
+
+        RouteState route = ROUTES.get(playerId);
+
+        EndpointSelection selection =
+                new EndpointSelection(
+                        pos,
+                        position,
+                        null,
+                        ((WireItem) player.getMainHandItem().getItem())
+                                .getWireTypeId()
+                );
+
+        // まだ敷設を開始していない場合
+        if (route == null) {
+            ROUTES.put(
+                    playerId,
+                    new RouteState(selection)
+            );
+
+            player.displayClientMessage(
+                    Component.literal(
+                            "碍子を始点に設定しました。次の接続先を選択してください。"
+                    ).withStyle(ChatFormatting.YELLOW),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        // 最後に選択した碍子をもう一度クリックした場合は終端
+        if (pos.equals(route.lastInsulatorPos)) {
+            return finishAtLastInsulator(
+                    level,
+                    player,
+                    route
+            );
+        }
+
+        // 始点と同じ碍子を選択した場合
+        if (pos.equals(route.start.anchor())) {
+            player.displayClientMessage(
+                    Component.literal(
+                            "始点と同じ碍子は終点にできません。"
+                    ).withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        // 既に経由した碍子を再選択した場合
+        for (InsulatorSelection support : route.supports) {
+            if (support.pos().equals(pos)) {
+                player.displayClientMessage(
+                        Component.literal(
+                                "この碍子は既に経由点として登録されています。"
+                        ).withStyle(ChatFormatting.RED),
+                        true
+                );
+
+                return InteractionResult.SUCCESS;
+            }
+        }
+
+        if (!(level.getBlockEntity(pos)
+                instanceof InsulatorBlockEntity insulatorEntity)) {
+            player.displayClientMessage(
+                    Component.literal(
+                            "碍子の管理データを取得できません。"
+                    ).withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        if (!insulatorEntity.canSupportMoreWires()) {
+            player.displayClientMessage(
+                    Component.literal(
+                            "この碍子は既に2本の電線を支持しています。"
+                    ).withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        route.supports.add(
+                new InsulatorSelection(
+                        pos.immutable(),
+                        position
+                )
+        );
+
+        route.lastInsulatorPos = pos.immutable();
+        route.lastInsulatorPosition = position;
+
+        player.displayClientMessage(
+                Component.literal(
+                        "中間支持点を追加しました。もう一度クリックすると、ここで終端します。"
+                ).withStyle(ChatFormatting.GREEN),
+                true
+        );
+
+        return InteractionResult.SUCCESS;
+    }
+
+    private static InteractionResult finishAtLastInsulator(
+            Level level,
+            Player player,
+            RouteState route
+    ) {
+        if (route.lastInsulatorPos == null
+                || route.lastInsulatorPosition == null) {
+            return InteractionResult.PASS;
+        }
+
+        route.supports.removeIf(
+                support -> support.pos().equals(
+                        route.lastInsulatorPos
+                )
+        );
+
+        EndpointSelection end =
+                new EndpointSelection(
+                        route.lastInsulatorPos,
+                        route.lastInsulatorPosition,
+                        null,
+                        route.start.wireTypeId()
+                );
+
+        return finishRoute(
+                level,
+                player,
+                route,
+                end,
+                true
         );
     }
 
@@ -509,21 +684,27 @@ public class WireItem extends Item {
             InteractionHand hand
     ) {
         ItemStack stack = player.getItemInHand(hand);
-        // シフト右クリックで接続選択をキャンセル
+
         if (player.isShiftKeyDown()) {
             if (level.isClientSide) {
-                return InteractionResultHolder.sidedSuccess(stack, true);
+                return InteractionResultHolder.sidedSuccess(
+                        stack,
+                        true
+                );
             }
 
-            boolean cancelled = FIRST_ENDPOINTS.remove(player.getUUID()) != null;
+            boolean cancelled =
+                    ROUTES.remove(player.getUUID()) != null;
 
             player.displayClientMessage(
                     Component.literal(
                             cancelled
-                                    ? "電線の接続選択をキャンセルしました。"
-                                    : "キャンセルできる接続選択はありません。"
+                                    ? "電線の敷設をキャンセルしました。"
+                                    : "キャンセルできる敷設はありません。"
                     ).withStyle(
-                            cancelled ? ChatFormatting.YELLOW : ChatFormatting.GRAY
+                            cancelled
+                                    ? ChatFormatting.YELLOW
+                                    : ChatFormatting.GRAY
                     ),
                     true
             );
@@ -533,26 +714,51 @@ public class WireItem extends Item {
 
         BranchHit hit = findBranchPortHit(level, player);
 
-        if (hit == null) {
-            return InteractionResultHolder.pass(stack);
+        if (hit != null) {
+            if (level.isClientSide) {
+                return InteractionResultHolder.sidedSuccess(
+                        stack,
+                        true
+                );
+            }
+
+            InteractionResult result = selectEndpoint(
+                    level,
+                    player,
+                    new EndpointSelection(
+                            BlockPos.containing(hit.position()),
+                            hit.position(),
+                            hit.branch().getUUID(),
+                            wireTypeId
+                    )
+            );
+
+            return new InteractionResultHolder<>(result, stack);
         }
 
-        if (level.isClientSide) {
-            return InteractionResultHolder.sidedSuccess(stack, true);
+        // 空中右クリック：最後に選択した碍子で終端
+        RouteState route = ROUTES.get(player.getUUID());
+
+        if (route != null
+                && route.lastInsulatorPos != null) {
+
+            if (level.isClientSide) {
+                return InteractionResultHolder.sidedSuccess(
+                        stack,
+                        true
+                );
+            }
+
+            InteractionResult result = finishAtLastInsulator(
+                    level,
+                    player,
+                    route
+            );
+
+            return new InteractionResultHolder<>(result, stack);
         }
 
-        InteractionResult result = selectEndpoint(
-                level,
-                player,
-                new EndpointSelection(
-                        BlockPos.containing(hit.position()),
-                        hit.position(),
-                        hit.branch().getUUID(),
-                        wireTypeId
-                )
-        );
-
-        return new InteractionResultHolder<>(result, stack);
+        return InteractionResultHolder.pass(stack);
     }
 
     /**
@@ -618,15 +824,16 @@ public class WireItem extends Item {
             Player player,
             EndpointSelection second
     ) {
-        if (level.isClientSide) {
-            return InteractionResult.SUCCESS;
-        }
-
         UUID playerId = player.getUUID();
-        EndpointSelection first = FIRST_ENDPOINTS.get(playerId);
 
-        if (first == null) {
-            FIRST_ENDPOINTS.put(playerId, second);
+        RouteState route = ROUTES.get(playerId);
+
+        // 最初の端子を始点に設定
+        if (route == null) {
+            ROUTES.put(
+                    playerId,
+                    new RouteState(second)
+            );
 
             player.displayClientMessage(
                     Component.translatable(
@@ -638,7 +845,26 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        if (first.position().distanceToSqr(second.position()) < 1.0E-8) {
+        return finishRoute(
+                level,
+                player,
+                route,
+                second,
+                false
+        );
+    }
+
+    private static InteractionResult finishRoute(
+            Level level,
+            Player player,
+            RouteState route,
+            EndpointSelection end,
+            boolean endIsInsulator
+    ) {
+        EndpointSelection start = route.start;
+
+        if (start.position().distanceToSqr(end.position())
+                < 1.0E-8) {
             player.displayClientMessage(
                     Component.translatable(
                             "message.powernetwork.wire.same_endpoint"
@@ -649,10 +875,8 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        FIRST_ENDPOINTS.remove(playerId);
-
-        double distance = first.position().distanceTo(second.position());
-        WireType wireType = WireTypeManager.get(first.wireTypeId());
+        WireType wireType =
+                WireTypeManager.get(start.wireTypeId());
 
         if (wireType == null) {
             player.displayClientMessage(
@@ -660,13 +884,18 @@ public class WireItem extends Item {
                             .withStyle(ChatFormatting.RED),
                     true
             );
+
             return InteractionResult.SUCCESS;
         }
 
-        if (distance < wireType.getMinimumLength()) {
+        double distance =
+                start.position().distanceTo(end.position());
+
+        if (distance < wireType.getMinimumLength()
+                || distance > wireType.getMaximumLength()) {
             player.displayClientMessage(
-                    Component.translatable(
-                            "message.powernetwork.wire.too_close"
+                    Component.literal(
+                            "電線の長さが設定範囲外です。"
                     ).withStyle(ChatFormatting.RED),
                     true
             );
@@ -674,20 +903,26 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        if (distance > wireType.getMaximumLength()) {
-            player.displayClientMessage(
-                    Component.translatable(
-                            "message.powernetwork.wire.too_long"
-                    ).withStyle(ChatFormatting.RED),
-                    true
-            );
+        // 中間支持点の存在と容量を事前確認
+        for (InsulatorSelection support : route.supports) {
+            if (!(level.getBlockEntity(support.pos())
+                    instanceof InsulatorBlockEntity be)
+                    || !be.canSupportMoreWires()) {
 
-            return InteractionResult.SUCCESS;
+                player.displayClientMessage(
+                        Component.literal(
+                                "中間碍子の支持登録に失敗する可能性があります。"
+                        ).withStyle(ChatFormatting.RED),
+                        true
+                );
+
+                return InteractionResult.SUCCESS;
+            }
         }
 
         AABB searchArea = new AABB(
-                first.position(),
-                second.position()
+                start.position(),
+                end.position()
         ).inflate(1.0);
 
         for (WireEntity existing : level.getEntitiesOfClass(
@@ -695,21 +930,21 @@ public class WireItem extends Item {
                 searchArea,
                 Entity::isAlive
         )) {
-            Vec3 existingA = existing.getEndpointAWorldPosition();
-            Vec3 existingB = existing.getEndpointBWorldPosition();
+            Vec3 a = existing.getEndpointAWorldPosition();
+            Vec3 b = existing.getEndpointBWorldPosition();
 
-            boolean sameDirection =
-                    existingA.distanceToSqr(first.position()) < 1.0E-8
-                            && existingB.distanceToSqr(second.position()) < 1.0E-8;
+            boolean same =
+                    a.distanceToSqr(start.position()) < 1.0E-8
+                            && b.distanceToSqr(end.position()) < 1.0E-8;
 
-            boolean reverseDirection =
-                    existingA.distanceToSqr(second.position()) < 1.0E-8
-                            && existingB.distanceToSqr(first.position()) < 1.0E-8;
+            boolean reverse =
+                    a.distanceToSqr(end.position()) < 1.0E-8
+                            && b.distanceToSqr(start.position()) < 1.0E-8;
 
-            if (sameDirection || reverseDirection) {
+            if (same || reverse) {
                 player.displayClientMessage(
                         Component.literal(
-                                "These terminals are already connected."
+                                "この端子間には既に電線があります。"
                         ).withStyle(ChatFormatting.RED),
                         true
                 );
@@ -720,18 +955,28 @@ public class WireItem extends Item {
 
         WireEntity wire = new WireEntity(
                 level,
-                first.position(),
-                second.position(),
-                first.anchor(),
-                second.anchor(),
-                first.branchUuid() != null,
-                second.branchUuid() != null,
-                first.wireTypeId()
+                start.position(),
+                end.position(),
+                start.anchor(),
+                end.anchor(),
+                start.branchUuid() != null,
+                end.branchUuid() != null,
+                start.wireTypeId()
         );
+
+        // 碍子を端点として使用した場合、端末状態を設定
+        if (level.getBlockState(start.anchor()).getBlock()
+                instanceof InsulatorBlock) {
+            wire.setTerminalA(true);
+        }
+
+        if (endIsInsulator) {
+            wire.setTerminalB(true);
+        }
 
         if (!level.addFreshEntity(wire)) {
             player.displayClientMessage(
-                    Component.literal("Failed to create the wire.")
+                    Component.literal("電線の生成に失敗しました。")
                             .withStyle(ChatFormatting.RED),
                     true
             );
@@ -739,24 +984,75 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // 分岐コネクタ C と電線の端点を関連付ける。
+        // 中間碍子を支持点として登録
+        List<InsulatorBlockEntity> registered =
+                new ArrayList<>();
+
+        boolean supportFailed = false;
+
+        for (InsulatorSelection support : route.supports) {
+            if (!(level.getBlockEntity(support.pos())
+                    instanceof InsulatorBlockEntity be)) {
+                supportFailed = true;
+                break;
+            }
+
+            if (!wire.addSupportPoint(
+                    support.pos(),
+                    support.position()
+            )) {
+                supportFailed = true;
+                break;
+            }
+
+            if (!be.addSupportedWire(wire.getUUID())) {
+                wire.removeSupportPoint(support.pos());
+                supportFailed = true;
+                break;
+            }
+
+            registered.add(be);
+        }
+
+        if (supportFailed) {
+            for (InsulatorBlockEntity be : registered) {
+                be.removeSupportedWire(wire.getUUID());
+            }
+
+            wire.discard();
+
+            player.displayClientMessage(
+                    Component.literal(
+                            "碍子への支持登録に失敗したため、電線を生成しませんでした。"
+                    ).withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
+        }
+
+        // 分岐コネクタとの関連付け
         if (level instanceof ServerLevel serverLevel) {
-            if (first.branchUuid() != null) {
-                Entity entity = serverLevel.getEntity(first.branchUuid());
+            if (start.branchUuid() != null) {
+                Entity entity =
+                        serverLevel.getEntity(start.branchUuid());
 
                 if (entity instanceof WireBranchConnectorEntity branch) {
                     wire.attachEndpointAToBranch(branch);
                 }
             }
 
-            if (second.branchUuid() != null) {
-                Entity entity = serverLevel.getEntity(second.branchUuid());
+            if (end.branchUuid() != null) {
+                Entity entity =
+                        serverLevel.getEntity(end.branchUuid());
 
                 if (entity instanceof WireBranchConnectorEntity branch) {
                     wire.attachEndpointBToBranch(branch);
                 }
             }
         }
+
+        ROUTES.remove(player.getUUID());
 
         player.displayClientMessage(
                 Component.translatable(
@@ -766,18 +1062,17 @@ public class WireItem extends Item {
         );
 
         PowerNetwork.LOGGER.debug(
-                "Created wire between {} at {} and {} at {}",
-                first.anchor(),
-                first.position(),
-                second.anchor(),
-                second.position()
+                "Created routed wire from {} to {} with {} support points",
+                start.anchor(),
+                end.anchor(),
+                route.supports.size()
         );
 
         return InteractionResult.SUCCESS;
     }
 
     public static void clearSelection(UUID playerId) {
-        FIRST_ENDPOINTS.remove(playerId);
+        ROUTES.remove(playerId);
     }
 
 
@@ -798,7 +1093,7 @@ public class WireItem extends Item {
                 return InteractionResult.SUCCESS;
             }
 
-            boolean cancelled = FIRST_ENDPOINTS.remove(player.getUUID()) != null;
+            boolean cancelled = ROUTES.remove(player.getUUID()) != null;
 
             player.displayClientMessage(
                     Component.literal(
