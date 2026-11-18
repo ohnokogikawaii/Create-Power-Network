@@ -133,6 +133,37 @@ public class WireEntity extends Entity {
                     EntityDataSerializers.STRING
             );
 
+    /**
+     * A/B端点が碍子上の端末処理になっているか。
+     */
+    private static final EntityDataAccessor<Boolean> TERMINAL_A =
+            SynchedEntityData.defineId(
+                    WireEntity.class,
+                    EntityDataSerializers.BOOLEAN
+            );
+
+    private static final EntityDataAccessor<Boolean> TERMINAL_B =
+            SynchedEntityData.defineId(
+                    WireEntity.class,
+                    EntityDataSerializers.BOOLEAN
+            );
+
+    /**
+     * 端末から再接続できる状態か。
+     * 現段階では端末の保存・同期に使用し、再接続処理は次段階で実装する。
+     */
+    private static final EntityDataAccessor<Boolean> RECONNECTABLE_A =
+            SynchedEntityData.defineId(
+                    WireEntity.class,
+                    EntityDataSerializers.BOOLEAN
+            );
+
+    private static final EntityDataAccessor<Boolean> RECONNECTABLE_B =
+            SynchedEntityData.defineId(
+                    WireEntity.class,
+                    EntityDataSerializers.BOOLEAN
+            );
+
     public WireEntity(
             EntityType<? extends WireEntity> entityType,
             Level level
@@ -203,6 +234,11 @@ public class WireEntity extends Entity {
         builder.define(BRANCH_A_ID, -1);
         builder.define(BRANCH_B_ID, -1);
         builder.define(SUPPORT_POINTS, "");
+        builder.define(TERMINAL_A, false);
+        builder.define(TERMINAL_B, false);
+
+        builder.define(RECONNECTABLE_A, false);
+        builder.define(RECONNECTABLE_B, false);
     }
 
     public BlockPos getEndpointA() {
@@ -301,6 +337,42 @@ public class WireEntity extends Entity {
 
     public Vec3 getEndpointBPosition() {
         return getEndpointBWorldPosition();
+    }
+
+    public boolean isTerminalA() {
+        return entityData.get(TERMINAL_A);
+    }
+
+    public boolean isTerminalB() {
+        return entityData.get(TERMINAL_B);
+    }
+
+    public boolean isReconnectableA() {
+        return entityData.get(RECONNECTABLE_A);
+    }
+
+    public boolean isReconnectableB() {
+        return entityData.get(RECONNECTABLE_B);
+    }
+
+    public void setTerminalA(boolean terminal) {
+        entityData.set(TERMINAL_A, terminal);
+        entityData.set(RECONNECTABLE_A, terminal);
+    }
+
+    public void setTerminalB(boolean terminal) {
+        entityData.set(TERMINAL_B, terminal);
+        entityData.set(RECONNECTABLE_B, terminal);
+    }
+
+    public void clearTerminalA() {
+        entityData.set(TERMINAL_A, false);
+        entityData.set(RECONNECTABLE_A, false);
+    }
+
+    public void clearTerminalB() {
+        entityData.set(TERMINAL_B, false);
+        entityData.set(RECONNECTABLE_B, false);
     }
 
     public ResourceLocation getWireTypeId() {
@@ -684,6 +756,11 @@ public class WireEntity extends Entity {
         }
 
         tag.put("SupportPoints", supportList);
+        tag.putBoolean("TerminalA", isTerminalA());
+        tag.putBoolean("TerminalB", isTerminalB());
+
+        tag.putBoolean("ReconnectableA", isReconnectableA());
+        tag.putBoolean("ReconnectableB", isReconnectableB());
     }
 
     @Override
@@ -793,6 +870,26 @@ public class WireEntity extends Entity {
                 );
             }
         }
+
+        entityData.set(
+                TERMINAL_A,
+                tag.getBoolean("TerminalA")
+        );
+
+        entityData.set(
+                TERMINAL_B,
+                tag.getBoolean("TerminalB")
+        );
+
+        entityData.set(
+                RECONNECTABLE_A,
+                tag.getBoolean("ReconnectableA")
+        );
+
+        entityData.set(
+                RECONNECTABLE_B,
+                tag.getBoolean("ReconnectableB")
+        );
 
         syncSupportPoints(supportPoints);
 
