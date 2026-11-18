@@ -7,8 +7,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.EntityBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.phys.AABB;
@@ -16,10 +18,14 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DirectionProperty;
 
 import java.util.List;
 
-public class InsulatorBlock extends HorizontalDirectionalBlock
+public class InsulatorBlock extends BaseEntityBlock
         implements WireConnectionPointProvider {
 
     public enum Type {
@@ -73,11 +79,18 @@ public class InsulatorBlock extends HorizontalDirectionalBlock
             Block.box(6, 6, 13, 10, 10, 15)
     );
 
+    public static final DirectionProperty FACING =
+            BlockStateProperties.HORIZONTAL_FACING;
+
     public InsulatorBlock(Properties properties, Type type) {
         super(properties);
         this.type = type;
+
         registerDefaultState(
-                stateDefinition.any().setValue(FACING, Direction.NORTH)
+                stateDefinition.any().setValue(
+                        FACING,
+                        Direction.NORTH
+                )
         );
     }
 
@@ -97,6 +110,14 @@ public class InsulatorBlock extends HorizontalDirectionalBlock
     }
 
     @Override
+    public BlockEntity newBlockEntity(
+            BlockPos pos,
+            BlockState state
+    ) {
+        return new InsulatorBlockEntity(pos, state);
+    }
+
+    @Override
     public List<ConnectionPoint> getConnectionPoints() {
         return getConnectionPoints(defaultBlockState());
     }
@@ -108,10 +129,15 @@ public class InsulatorBlock extends HorizontalDirectionalBlock
                     new Vec3(0.5, 0.5, 1.5 / 16.0),
                     state.getValue(FACING)
             );
+
             return List.of(new ConnectionPoint(
                     "wire",
                     point,
-                    new Vec3(3.5 / 16.0, 1.5 / 16.0, 3.5 / 16.0)
+                    new Vec3(
+                            3.5 / 16.0,
+                            1.5 / 16.0,
+                            3.5 / 16.0
+                    )
             ));
         }
 
@@ -122,16 +148,44 @@ public class InsulatorBlock extends HorizontalDirectionalBlock
             case TRANSMISSION_LINE -> 0.5;
         };
 
-        return List.of(WireConnectionPointProvider.connectionPoint(
-                "wire", 0.5, height, 0.5
-        ));
+        return List.of(
+                WireConnectionPointProvider.connectionPoint(
+                        "wire",
+                        0.5,
+                        height,
+                        0.5
+                )
+        );
     }
 
-    private static Vec3 rotatePosition(Vec3 p, Direction facing) {
+    /**
+     * 固定式碍子の支持位置をワールド座標で取得する。
+     */
+    public Vec3 getSupportPosition(BlockState state, BlockPos pos) {
+        ConnectionPoint point = getConnectionPoints(state).get(0);
+        return point.worldPosition(pos);
+    }
+
+    private static Vec3 rotatePosition(
+            Vec3 p,
+            Direction facing
+    ) {
         return switch (facing) {
-            case SOUTH -> new Vec3(1 - p.x, p.y, 1 - p.z);
-            case EAST -> new Vec3(1 - p.z, p.y, p.x);
-            case WEST -> new Vec3(p.z, p.y, 1 - p.x);
+            case SOUTH -> new Vec3(
+                    1 - p.x,
+                    p.y,
+                    1 - p.z
+            );
+            case EAST -> new Vec3(
+                    1 - p.z,
+                    p.y,
+                    p.x
+            );
+            case WEST -> new Vec3(
+                    p.z,
+                    p.y,
+                    1 - p.x
+            );
             default -> p;
         };
     }
@@ -188,10 +242,17 @@ public class InsulatorBlock extends HorizontalDirectionalBlock
                 }
             }
 
-            result = Shapes.or(result, Shapes.box(
-                    minX, box.minY, minZ,
-                    maxX, box.maxY, maxZ
-            ));
+            result = Shapes.or(
+                    result,
+                    Shapes.box(
+                            minX,
+                            box.minY,
+                            minZ,
+                            maxX,
+                            box.maxY,
+                            maxZ
+                    )
+            );
         }
 
         return result;
@@ -204,7 +265,10 @@ public class InsulatorBlock extends HorizontalDirectionalBlock
             BlockPos pos,
             CollisionContext context
     ) {
-        return rotateShape(getBaseShape(), state.getValue(FACING));
+        return rotateShape(
+                getBaseShape(),
+                state.getValue(FACING)
+        );
     }
 
     @Override
@@ -218,7 +282,7 @@ public class InsulatorBlock extends HorizontalDirectionalBlock
     }
 
     @Override
-    protected MapCodec<InsulatorBlock> codec() {
+    protected MapCodec<? extends BaseEntityBlock> codec() {
         return MapCodec.unit(this);
     }
 }

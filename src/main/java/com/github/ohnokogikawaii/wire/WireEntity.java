@@ -14,6 +14,12 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 import java.util.UUID;
 
@@ -105,6 +111,27 @@ public class WireEntity extends Entity {
      */
     private UUID branchAUuid;
     private UUID branchBUuid;
+    /**
+     * 固定式碍子による電線の支持点。
+     *
+     * insulatorPos:
+     *   支持している碍子のブロック座標。
+     *
+     * position:
+     *   電線が碍子を通過する正確なワールド座標。
+     */
+    public record SupportPoint(
+            BlockPos insulatorPos,
+            Vec3 position
+    ) {}
+
+    private static final int MAX_SUPPORT_POINTS = 64;
+
+    private static final EntityDataAccessor<String> SUPPORT_POINTS =
+            SynchedEntityData.defineId(
+                    WireEntity.class,
+                    EntityDataSerializers.STRING
+            );
 
     public WireEntity(
             EntityType<? extends WireEntity> entityType,
@@ -175,6 +202,7 @@ public class WireEntity extends Entity {
 
         builder.define(BRANCH_A_ID, -1);
         builder.define(BRANCH_B_ID, -1);
+        builder.define(SUPPORT_POINTS, "");
     }
 
     public BlockPos getEndpointA() {
@@ -341,6 +369,116 @@ public class WireEntity extends Entity {
     public UUID getBranchBUuid() {
         return branchBUuid;
     }
+    /**
+     * 支持点一覧を取得する。
+     */
+    public List<SupportPoint> getSupportPoints() {
+        String serialized = entityData.get(SUPPORT_POINTS);
+
+        if (serialized.isBlank()) {
+            return Collections.emptyList();
+        }
+
+        List<SupportPoint> result = new ArrayList<>();
+
+        for (String entry : serialized.split(";")) {
+            try {
+                String[] values = entry.split(",");
+
+                if (values.length != 6) {
+                    continue;
+                }
+
+                BlockPos pos = new BlockPos(
+                        Integer.parseInt(values[0]),
+                        Integer.parseInt(values[1]),
+                        Integer.parseInt(values[2])
+                );
+
+                Vec3 point = new Vec3(
+                        Double.parseDouble(values[3]),
+                        Double.parseDouble(values[4]),
+                        Double.parseDouble(values[5])
+                );
+
+                result.add(new SupportPoint(pos, point));
+            } catch (NumberFormatException ignored) {
+                // 不正な同期データは読み飛ばす。
+            }
+        }
+
+        return Collections.unmodifiableList(result);
+    }
+
+    /**
+     * 固定式碍子の支持点を追加する。
+     */
+    public boolean addSupportPoint(BlockPos insulatorPos, Vec3 position) {
+        if (insulatorPos == null || position == null) {
+            return false;
+        }
+
+        List<SupportPoint> points = new ArrayList<>(getSupportPoints());
+
+        for (SupportPoint point : points) {
+            if (point.insulatorPos().equals(insulatorPos)) {
+                return false;
+            }
+        }
+
+        if (points.size() >= MAX_SUPPORT_POINTS) {
+            return false;
+        }
+
+        points.add(new SupportPoint(insulatorPos.immutable(), position));
+
+        syncSupportPoints(points);
+        return true;
+    }
+
+    /**
+     * 指定した碍子の支持点を解除する。
+     */
+    public boolean removeSupportPoint(BlockPos insulatorPos) {
+        List<SupportPoint> points = new ArrayList<>(getSupportPoints());
+
+        boolean removed = points.removeIf(
+                point -> point.insulatorPos().equals(insulatorPos)
+        );
+
+        if (!removed) {
+            return false;
+        }
+
+        syncSupportPoints(points);
+        return true;
+    }
+
+    /**
+     * 支持点一覧をクライアントへ同期する。
+     */
+    private void syncSupportPoints(List<SupportPoint> points) {
+        StringBuilder builder = new StringBuilder();
+
+        for (SupportPoint point : points) {
+            if (!builder.isEmpty()) {
+                builder.append(";");
+            }
+
+            BlockPos pos = point.insulatorPos();
+            Vec3 location = point.position();
+
+            builder.append(pos.getX()).append(",");
+            builder.append(pos.getY()).append(",");
+            builder.append(pos.getZ()).append(",");
+
+            builder.append(location.x).append(",");
+            builder.append(location.y).append(",");
+            builder.append(location.z);
+        }
+
+        entityData.set(SUPPORT_POINTS, builder.toString());
+    }
 
     /**
      * 指定された端点に接続されている分岐コネクタを取得する。
@@ -501,6 +639,24 @@ public class WireEntity extends Entity {
         if (branchBUuid != null) {
             tag.putUUID("BranchB", branchBUuid);
         }
+        ListTag supportList = new ListTag();
+
+        for (SupportPoint point : getSupportPoints()) {
+            CompoundTag entry = new CompoundTag();
+
+            entry.putLong(
+                    "InsulatorPos",
+                    point.insulatorPos().asLong()
+            );
+
+            entry.putDouble("X", point.position().x);
+            entry.putDouble("Y", point.position().y);
+            entry.putDouble("Z", point.position().z);
+
+            supportList.add(entry);
+        }
+
+        tag.put("SupportPoints", supportList);
     }
 
     @Override
@@ -582,16 +738,69 @@ public class WireEntity extends Entity {
                     ResourceLocation.parse(wireType)
             );
         }
+        List<SupportPoint> supportPoints = new ArrayList<>();
+
+        if (tag.contains("SupportPoints", Tag.TAG_LIST)) {
+            ListTag supportList = tag.getList(
+                    "SupportPoints",
+                    Tag.TAG_COMPOUND
+            );
+
+            for (int i = 0; i < supportList.size()
+                    && supportPoints.size() < MAX_SUPPORT_POINTS; i++) {
+
+                CompoundTag entry = supportList.getCompound(i);
+
+                BlockPos insulatorPos = BlockPos.of(
+                        entry.getLong("InsulatorPos")
+                );
+
+                Vec3 position = new Vec3(
+                        entry.getDouble("X"),
+                        entry.getDouble("Y"),
+                        entry.getDouble("Z")
+                );
+
+                supportPoints.add(
+                        new SupportPoint(insulatorPos, position)
+                );
+            }
+        }
+
+        syncSupportPoints(supportPoints);
 
         updatePosition();
     }
 
     @Override
     public AABB getBoundingBoxForCulling() {
+        Vec3 a = getEndpointAWorldPosition();
+        Vec3 b = getEndpointBWorldPosition();
+
+        double minX = Math.min(a.x, b.x);
+        double minY = Math.min(a.y, b.y);
+        double minZ = Math.min(a.z, b.z);
+
+        double maxX = Math.max(a.x, b.x);
+        double maxY = Math.max(a.y, b.y);
+        double maxZ = Math.max(a.z, b.z);
+
+        for (SupportPoint point : getSupportPoints()) {
+            Vec3 p = point.position();
+
+            minX = Math.min(minX, p.x);
+            minY = Math.min(minY, p.y);
+            minZ = Math.min(minZ, p.z);
+
+            maxX = Math.max(maxX, p.x);
+            maxY = Math.max(maxY, p.y);
+            maxZ = Math.max(maxZ, p.z);
+        }
+
         return new AABB(
-                getEndpointAWorldPosition(),
-                getEndpointBWorldPosition()
-        ).inflate(0.25);
+                minX, minY, minZ,
+                maxX, maxY, maxZ
+        ).inflate(1.0);
     }
 
     @Override

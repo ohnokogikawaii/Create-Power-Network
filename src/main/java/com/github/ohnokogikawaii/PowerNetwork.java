@@ -1,6 +1,7 @@
 
 package com.github.ohnokogikawaii;
 
+import com.github.ohnokogikawaii.registry.ModBlockEntities;
 import com.github.ohnokogikawaii.registry.ModBlocks;
 import com.github.ohnokogikawaii.registry.ModEntities;
 import com.github.ohnokogikawaii.registry.ModItems;
@@ -51,6 +52,7 @@ public class PowerNetwork {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
         ModEntities.register(modEventBus);
+        ModBlockEntities.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
     }
 }
