@@ -841,4 +841,40 @@ public class WireEntity extends Entity {
 
         return distance < size * size * 64.0;
     }
+
+    /**
+     * 電線が削除される際に、碍子側の支持登録も解除する。
+     *
+     * チャンクのアンロードでは支持登録を維持する。
+     * 実際に電線が破棄された場合だけ関連データを整理する。
+     */
+    @Override
+    public void remove(RemovalReason reason) {
+
+        if (!level().isClientSide()
+                && (reason == RemovalReason.DISCARDED
+                || reason == RemovalReason.KILLED)) {
+
+            UUID wireId = getUUID();
+
+            for (SupportPoint point :
+                    new ArrayList<>(getSupportPoints())) {
+
+                BlockPos insulatorPos = point.insulatorPos();
+
+                // 碍子のチャンクが読み込まれている場合だけ処理する。
+                if (!level().hasChunkAt(insulatorPos)) {
+                    continue;
+                }
+
+                if (level().getBlockEntity(insulatorPos)
+                        instanceof com.github.ohnokogikawaii.insulator.InsulatorBlockEntity insulatorEntity) {
+
+                    insulatorEntity.removeSupportedWire(wireId);
+                }
+            }
+        }
+
+        super.remove(reason);
+    }
 }

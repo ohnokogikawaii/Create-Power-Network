@@ -61,16 +61,6 @@ public class WireCutterItem extends Item {
         // 親ワイヤーに取り付けられた分岐コネクタを削除する。
         removeConnectorsOnWire(level, wire);
 
-        // 碍子側に保存されている支持登録を解除する。
-        for (WireEntity.SupportPoint point :
-                new ArrayList<>(wire.getSupportPoints())) {
-
-            if (level.getBlockEntity(point.insulatorPos())
-                    instanceof InsulatorBlockEntity insulatorEntity) {
-
-                insulatorEntity.removeSupportedWire(wire.getUUID());
-            }
-        }
 
         // 対象ワイヤーを切断する。
         wire.discard();
