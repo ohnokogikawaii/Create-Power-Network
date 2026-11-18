@@ -903,7 +903,31 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // 中間支持点の存在と容量を事前確認
+        // 始点・終点の碍子の容量を事前確認
+        for (BlockPos endpoint : List.of(
+                start.anchor(),
+                end.anchor()
+        )) {
+            if (level.getBlockState(endpoint).getBlock()
+                    instanceof InsulatorBlock) {
+
+                if (!(level.getBlockEntity(endpoint)
+                        instanceof InsulatorBlockEntity be)
+                        || !be.canSupportMoreWires()) {
+
+                    player.displayClientMessage(
+                            Component.literal(
+                                    "始点または終点の碍子は、これ以上電線を支持できません。"
+                            ).withStyle(ChatFormatting.RED),
+                            true
+                    );
+
+                    return InteractionResult.SUCCESS;
+                }
+            }
+        }
+
+// 中間支持点の存在と容量を事前確認
         for (InsulatorSelection support : route.supports) {
             if (!(level.getBlockEntity(support.pos())
                     instanceof InsulatorBlockEntity be)
@@ -984,34 +1008,61 @@ public class WireItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // 中間碍子を支持点として登録
+        // 始点・終点・中間碍子を支持登録する
         List<InsulatorBlockEntity> registered =
                 new ArrayList<>();
 
         boolean supportFailed = false;
 
-        for (InsulatorSelection support : route.supports) {
-            if (!(level.getBlockEntity(support.pos())
+// 始点・終点の碍子を登録
+        for (BlockPos endpoint : List.of(
+                start.anchor(),
+                end.anchor()
+        )) {
+            if (!(level.getBlockState(endpoint).getBlock()
+                    instanceof InsulatorBlock)) {
+                continue;
+            }
+
+            if (!(level.getBlockEntity(endpoint)
                     instanceof InsulatorBlockEntity be)) {
                 supportFailed = true;
                 break;
             }
 
-            if (!wire.addSupportPoint(
-                    support.pos(),
-                    support.position()
-            )) {
-                supportFailed = true;
-                break;
-            }
-
             if (!be.addSupportedWire(wire.getUUID())) {
-                wire.removeSupportPoint(support.pos());
                 supportFailed = true;
                 break;
             }
 
             registered.add(be);
+        }
+
+// 中間碍子を支持点として登録
+        if (!supportFailed) {
+            for (InsulatorSelection support : route.supports) {
+                if (!(level.getBlockEntity(support.pos())
+                        instanceof InsulatorBlockEntity be)) {
+                    supportFailed = true;
+                    break;
+                }
+
+                if (!wire.addSupportPoint(
+                        support.pos(),
+                        support.position()
+                )) {
+                    supportFailed = true;
+                    break;
+                }
+
+                if (!be.addSupportedWire(wire.getUUID())) {
+                    wire.removeSupportPoint(support.pos());
+                    supportFailed = true;
+                    break;
+                }
+
+                registered.add(be);
+            }
         }
 
         if (supportFailed) {
