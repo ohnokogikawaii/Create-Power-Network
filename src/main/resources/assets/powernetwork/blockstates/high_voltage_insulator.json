@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "powernetwork:block/high_voltage_insulator"
+    },
+    "facing=east": {
+      "model": "powernetwork:block/high_voltage_insulator",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "powernetwork:block/high_voltage_insulator",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "powernetwork:block/high_voltage_insulator",
+      "y": 270
+    }
+  }
+}

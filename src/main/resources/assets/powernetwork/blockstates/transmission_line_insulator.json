@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "powernetwork:block/transmission_line_insulator",
+      "y": 0
+    },
+    "facing=east": {
+      "model": "powernetwork:block/transmission_line_insulator",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "powernetwork:block/transmission_line_insulator",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "powernetwork:block/transmission_line_insulator",
+      "y": 270
+    }
+  }
+}
