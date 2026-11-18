@@ -91,6 +91,18 @@ public class WireEntity extends Entity {
                     EntityDataSerializers.STRING
             );
 
+    private UUID networkId = UUID.randomUUID();
+
+    public UUID getNetworkId() {
+        return networkId;
+    }
+
+    public void setNetworkId(UUID networkId) {
+        if (networkId != null) {
+            this.networkId = networkId;
+        }
+    }
+
     /**
      * クライアント側で分岐コネクタを取得するための Entity ID。
      */
@@ -704,6 +716,7 @@ public class WireEntity extends Entity {
     protected void addAdditionalSaveData(CompoundTag tag) {
         tag.putLong("EndpointA", getEndpointA().asLong());
         tag.putLong("EndpointB", getEndpointB().asLong());
+        tag.putUUID("NetworkId", networkId);
 
         Vec3 endpointA = getEndpointAWorldPosition();
         Vec3 endpointB = getEndpointBWorldPosition();
@@ -765,6 +778,11 @@ public class WireEntity extends Entity {
 
     @Override
     protected void readAdditionalSaveData(CompoundTag tag) {
+        if (tag.hasUUID("NetworkId")) {
+            networkId = tag.getUUID("NetworkId");
+        } else {
+            networkId = UUID.randomUUID();
+        }
         BlockPos endpointA = BlockPos.of(
                 tag.getLong("EndpointA")
         );
