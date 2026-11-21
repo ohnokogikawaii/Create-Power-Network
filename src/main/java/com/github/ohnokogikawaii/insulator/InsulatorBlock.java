@@ -25,7 +25,8 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.RenderShape;
-
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.UUID;
 
 import java.util.List;
@@ -87,6 +88,53 @@ public class InsulatorBlock extends BaseEntityBlock
             Block.box(4, 5, 11, 12, 11, 13),
             Block.box(6, 6, 13, 10, 10, 15)
     );
+
+    /**
+     * 碍子の種類・向きごとの回転済み形状キャッシュ。
+     *
+     * 起動時に各形状を一度だけ生成し、
+     * getShape() ではキャッシュ済みの形状を返す。
+     */
+    private static final Map<Type, Map<Direction, VoxelShape>> SHAPE_CACHE =
+            createShapeCache();
+
+    private static Map<Type, Map<Direction, VoxelShape>> createShapeCache() {
+        Map<Type, Map<Direction, VoxelShape>> cache =
+                new EnumMap<>(Type.class);
+
+        for (Type type : Type.values()) {
+            VoxelShape baseShape = switch (type) {
+                case LOW_VOLTAGE -> LOW_SHAPE;
+                case HIGH_VOLTAGE -> HIGH_SHAPE;
+                case EXTRA_HIGH_VOLTAGE -> EXTRA_HIGH_SHAPE;
+                case TRANSMISSION_LINE -> TRANSMISSION_SHAPE;
+            };
+
+            Map<Direction, VoxelShape> directions =
+                    new EnumMap<>(Direction.class);
+
+            directions.put(Direction.NORTH, baseShape);
+
+            directions.put(
+                    Direction.SOUTH,
+                    rotateShape(baseShape, Direction.SOUTH)
+            );
+
+            directions.put(
+                    Direction.EAST,
+                    rotateShape(baseShape, Direction.EAST)
+            );
+
+            directions.put(
+                    Direction.WEST,
+                    rotateShape(baseShape, Direction.WEST)
+            );
+
+            cache.put(type, Map.copyOf(directions));
+        }
+
+        return Map.copyOf(cache);
+    }
 
     public static final DirectionProperty FACING =
             BlockStateProperties.HORIZONTAL_FACING;
@@ -279,10 +327,9 @@ public class InsulatorBlock extends BaseEntityBlock
             BlockPos pos,
             CollisionContext context
     ) {
-        return rotateShape(
-                getBaseShape(),
-                state.getValue(FACING)
-        );
+        return SHAPE_CACHE
+                .get(type)
+                .get(state.getValue(FACING));
     }
 
     @Override
