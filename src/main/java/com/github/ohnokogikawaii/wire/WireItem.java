@@ -1089,6 +1089,47 @@ public class WireItem extends Item {
         return InteractionResult.SUCCESS;
     }
 
+    /**
+     * 2つの碍子が、同じ既存電線に接続されているか確認する。
+     *
+     * 始点・終点だけでなく、中間支持点も判定対象にする。
+     */
+    private static boolean hasExistingWireBetweenInsulators(
+            Level level,
+            BlockPos start,
+            BlockPos end
+    ) {
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return false;
+        }
+
+        if (!(level.getBlockEntity(start)
+                instanceof InsulatorBlockEntity startEntity)
+                || !(level.getBlockEntity(end)
+                instanceof InsulatorBlockEntity endEntity)) {
+            return false;
+        }
+
+        List<UUID> startWireIds = startEntity.getSupportedWireIds();
+        List<UUID> endWireIds = endEntity.getSupportedWireIds();
+
+        // 共通する電線UUIDが存在するか確認
+        for (UUID wireId : startWireIds) {
+            if (!endWireIds.contains(wireId)) {
+                continue;
+            }
+
+            // 実際に存在する電線か確認
+            if (serverLevel.getEntity(wireId)
+                    instanceof WireEntity wire
+                    && wire.isAlive()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static InteractionResult finishRoute(
             Level level,
             Player player,
@@ -1199,6 +1240,28 @@ public class WireItem extends Item {
 
                 return InteractionResult.SUCCESS;
             }
+        }
+
+        // 碍子間の既存電線を確認する。
+// 中間支持点も含めて判定する。
+        if (level.getBlockState(start.anchor()).getBlock()
+                instanceof InsulatorBlock
+                && level.getBlockState(end.anchor()).getBlock()
+                instanceof InsulatorBlock
+                && hasExistingWireBetweenInsulators(
+                level,
+                start.anchor(),
+                end.anchor()
+        )) {
+
+            player.displayClientMessage(
+                    Component.literal(
+                            "この碍子間には既に電線が接続されています。"
+                    ).withStyle(ChatFormatting.RED),
+                    true
+            );
+
+            return InteractionResult.SUCCESS;
         }
 
         AABB searchArea = new AABB(
