@@ -15,5 +15,7 @@
   "message.powernetwork.wire.too_long": "ワイヤーが長すぎます",
   "block.powernetwork.pas": "柱上高圧気中負荷開閉器",
   "block.powernetwork.pas_operating_lever": "PAS操作レバー",
-  "block.powernetwork.pas_operating_rope": "PAS操作紐"
+  "block.powernetwork.pas_operating_rope": "PAS操作紐",
+  "block.powernetwork.sog": "SOG制御装置",
+  "item.powernetwork.sog_linker": "SOG接続器"
 }

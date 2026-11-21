@@ -4,6 +4,7 @@ package com.github.ohnokogikawaii.registry;
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.insulator.InsulatorBlockEntity;
 import com.github.ohnokogikawaii.pas.PASBlockEntity;
+import com.github.ohnokogikawaii.pas.SOGBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.IEventBus;
@@ -43,6 +44,15 @@ public final class ModBlockEntities {
                     () -> BlockEntityType.Builder.of(
                             PASBlockEntity::new,
                             ModBlocks.PAS.get()
+                    ).build(null)
+            );
+
+    public static final Supplier<BlockEntityType<SOGBlockEntity>> SOG =
+            BLOCK_ENTITY_TYPES.register(
+                    "sog",
+                    () -> BlockEntityType.Builder.of(
+                            SOGBlockEntity::new,
+                            ModBlocks.SOG.get()
                     ).build(null)
             );
 

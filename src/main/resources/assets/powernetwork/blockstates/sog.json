@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "powernetwork:block/sog"
+    },
+    "facing=south": {
+      "model": "powernetwork:block/sog"
+    },
+    "facing=east": {
+      "model": "powernetwork:block/sog"
+    },
+    "facing=west": {
+      "model": "powernetwork:block/sog"
+    }
+  }
+}

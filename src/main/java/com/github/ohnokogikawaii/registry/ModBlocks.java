@@ -7,6 +7,7 @@ import com.github.ohnokogikawaii.insulator.InsulatorBlock;
 import com.github.ohnokogikawaii.pas.PASBlock;
 import com.github.ohnokogikawaii.pas.PASOperatingLeverBlock;
 import com.github.ohnokogikawaii.pas.PASOperatingRopeBlock;
+import com.github.ohnokogikawaii.pas.SOGBlock;
 import com.github.ohnokogikawaii.terminal.TerminalBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -96,6 +97,16 @@ public final class ModBlocks {
                             .strength(0.5F)
                             .noOcclusion()
                             .noCollission()
+            );
+
+    public static final DeferredBlock<SOGBlock> SOG =
+            BLOCKS.registerBlock(
+                    "sog",
+                    SOGBlock::new,
+                    BlockBehaviour.Properties.of()
+                            .mapColor(MapColor.METAL)
+                            .strength(2.0F, 4.0F)
+                            .noOcclusion()
             );
 
     private static BlockBehaviour.Properties insulatorProperties() {

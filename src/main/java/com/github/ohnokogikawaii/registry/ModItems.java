@@ -1,6 +1,7 @@
 package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
+import com.github.ohnokogikawaii.pas.SOGLinkerItem;
 import com.github.ohnokogikawaii.wire.WireBranchConnectorItem;
 import com.github.ohnokogikawaii.wire.WireCutterItem;
 import com.github.ohnokogikawaii.wire.WireItem;
@@ -108,6 +109,20 @@ public final class ModItems {
             ITEMS.registerSimpleBlockItem(
                     "pas_operating_rope",
                     ModBlocks.PAS_OPERATING_ROPE
+            );
+
+    public static final DeferredItem<BlockItem> SOG =
+            ITEMS.registerSimpleBlockItem(
+                    "sog",
+                    ModBlocks.SOG
+            );
+
+    public static final DeferredItem<SOGLinkerItem> SOG_LINKER =
+            ITEMS.register(
+                    "sog_linker",
+                    () -> new SOGLinkerItem(
+                            new Item.Properties().stacksTo(1)
+                    )
             );
 
     private ModItems() {
