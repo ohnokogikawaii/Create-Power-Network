@@ -142,6 +142,12 @@ public class PASBlockEntity extends BlockEntity {
     /**
      * 接続されているSOGへPASの制御情報を渡す。
      */
+    /**
+     * 接続されているSOGへPASの制御情報を渡す。
+     *
+     * DIRECTの場合だけ直接通知する。
+     * CONTROL_CABLEの場合は専用制御線を経由する。
+     */
     public void publishControlSignals() {
         if (!isServerSide() || linkedSogPos == null) {
             return;
@@ -158,6 +164,12 @@ public class PASBlockEntity extends BlockEntity {
         }
 
         if (!worldPosition.equals(sog.getLinkedPasPos())) {
+            return;
+        }
+
+        // 直接接続モード以外では送信しない。
+        if (sog.getControlMode()
+                != SOGBlockEntity.ControlMode.DIRECT) {
             return;
         }
 

@@ -61,7 +61,20 @@ public class SOGBlockEntity extends BlockEntity {
             return;
         }
 
+        if (controlMode == mode) {
+            return;
+        }
+
         controlMode = mode;
+
+        // 制御線モードへ切り替えた場合、
+        // 直接接続で受信していた古い信号を破棄する。
+        if (mode == ControlMode.CONTROL_CABLE) {
+            latestSignals = PASControlSignals.NONE;
+        } else {
+            refreshControlSignals();
+        }
+
         setChanged();
     }
 
@@ -139,8 +152,15 @@ public class SOGBlockEntity extends BlockEntity {
     /**
      * PASの現在の制御情報を再取得する。
      */
+    /**
+     * DIRECT接続時にPASの現在の制御情報を再取得する。
+     *
+     * CONTROL_CABLEの場合は専用制御線側から受信する。
+     */
     public boolean refreshControlSignals() {
-        if (!isServerSide() || linkedPasPos == null) {
+        if (!isServerSide()
+                || linkedPasPos == null
+                || controlMode != ControlMode.DIRECT) {
             return false;
         }
 
