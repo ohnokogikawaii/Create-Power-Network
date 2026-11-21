@@ -47,6 +47,7 @@ public class SOGBlockEntity extends BlockEntity {
      * SOGとPASを相互に紐付ける。
      * 既存の接続先が読み込まれていない場合は変更しない。
      */
+
     public boolean linkToPas(PASBlockEntity pas) {
         if (level == null || level.isClientSide || pas == null) {
             return false;
@@ -58,42 +59,27 @@ public class SOGBlockEntity extends BlockEntity {
 
         BlockPos newPasPos = pas.getBlockPos();
 
-        if (newPasPos.equals(linkedPasPos)) {
+        // 同じPASへの再接続は許可する。
+        if (newPasPos.equals(linkedPasPos)
+                && worldPosition.equals(pas.getLinkedSogPos())) {
             return true;
         }
 
-        // SOG側の既存接続を解除する。
-        if (linkedPasPos != null) {
-            if (!level.hasChunkAt(linkedPasPos)) {
-                return false;
-            }
-
-            BlockEntity oldEntity = level.getBlockEntity(linkedPasPos);
-
-            if (!(oldEntity instanceof PASBlockEntity oldPas)) {
-                return false;
-            }
-
-            oldPas.clearLinkedSogIfMatches(worldPosition);
+        // SOGが既に別のPASに接続されている場合は拒否。
+        if (linkedPasPos != null
+                && !linkedPasPos.equals(newPasPos)) {
+            return false;
         }
 
-        // PAS側に別のSOGが接続されていないか確認する。
+        // PASが既に別のSOGに接続されている場合は拒否。
         BlockPos existingSogPos = pas.getLinkedSogPos();
 
-        if (existingSogPos != null && !existingSogPos.equals(worldPosition)) {
-            if (!level.hasChunkAt(existingSogPos)) {
-                return false;
-            }
-
-            BlockEntity existingEntity = level.getBlockEntity(existingSogPos);
-
-            if (!(existingEntity instanceof SOGBlockEntity existingSog)) {
-                return false;
-            }
-
-            existingSog.clearLinkedPasIfMatches(newPasPos);
+        if (existingSogPos != null
+                && !existingSogPos.equals(worldPosition)) {
+            return false;
         }
 
+        // 双方の接続先を確認できた場合だけ登録する。
         linkedPasPos = newPasPos;
         pas.setLinkedSogPos(worldPosition);
 
@@ -102,6 +88,7 @@ public class SOGBlockEntity extends BlockEntity {
 
         return true;
     }
+
 
     public void clearLinkedPasIfMatches(BlockPos pasPos) {
         if (linkedPasPos == null || !linkedPasPos.equals(pasPos)) {
