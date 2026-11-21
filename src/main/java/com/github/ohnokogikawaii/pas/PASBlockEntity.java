@@ -1,7 +1,9 @@
+
 package com.github.ohnokogikawaii.pas;
 
 import com.github.ohnokogikawaii.registry.ModBlockEntities;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -11,28 +13,17 @@ public class PASBlockEntity extends BlockEntity {
         super(ModBlockEntities.PAS.get(), pos, state);
     }
 
-    /**
-     * PASが投入状態かどうか。
-     *
-     * 3極は一つの状態で管理するため、
-     * R・S・T相が個別に開閉することはない。
-     */
     public boolean isClosed() {
         return !getBlockState().getValue(PASBlock.OPEN);
     }
 
-    /**
-     * PASが開放状態かどうか。
-     */
     public boolean isOpen() {
         return getBlockState().getValue(PASBlock.OPEN);
     }
 
     /**
-     * PASの開閉操作を行う共通処理。
-     *
-     * 手動レバー、操作紐、SOGなどは、
-     * 将来的にこのメソッドを呼び出す。
+     * PASの共通開閉処理。
+     * 手動レバー・操作紐・SOGから共通して呼び出す。
      */
     public void setClosed(boolean closed) {
         if (level == null || level.isClientSide) {
@@ -57,7 +48,42 @@ public class PASBlockEntity extends BlockEntity {
                 3
         );
 
+        syncOperatingLevers(shouldBeOpen);
         setChanged();
+    }
+
+    /**
+     * PAS本体に取り付けられた操作レバーの状態を同期する。
+     */
+    private void syncOperatingLevers(boolean open) {
+        if (level == null || level.isClientSide) {
+            return;
+        }
+
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockPos leverPos =
+                    worldPosition.relative(direction.getOpposite());
+
+            BlockState leverState = level.getBlockState(leverPos);
+
+            if (!(leverState.getBlock() instanceof PASOperatingLeverBlock)) {
+                continue;
+            }
+
+            if (leverState.getValue(PASOperatingLeverBlock.FACING) != direction) {
+                continue;
+            }
+
+            if (leverState.getValue(PASOperatingLeverBlock.OPEN) == open) {
+                continue;
+            }
+
+            level.setBlock(
+                    leverPos,
+                    leverState.setValue(PASOperatingLeverBlock.OPEN, open),
+                    3
+            );
+        }
     }
 
     public void setOpen(boolean open) {

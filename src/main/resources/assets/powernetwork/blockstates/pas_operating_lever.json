@@ -1,17 +1,33 @@
+
 {
   "variants": {
-    "facing=north": {
+    "facing=north,open=false": {
       "model": "powernetwork:block/pas_operating_lever"
     },
-    "facing=east": {
+    "facing=east,open=false": {
       "model": "powernetwork:block/pas_operating_lever",
       "y": 90
     },
-    "facing=south": {
+    "facing=south,open=false": {
       "model": "powernetwork:block/pas_operating_lever",
       "y": 180
     },
-    "facing=west": {
+    "facing=west,open=false": {
+      "model": "powernetwork:block/pas_operating_lever",
+      "y": 270
+    },
+    "facing=north,open=true": {
+      "model": "powernetwork:block/pas_operating_lever"
+    },
+    "facing=east,open=true": {
+      "model": "powernetwork:block/pas_operating_lever",
+      "y": 90
+    },
+    "facing=south,open=true": {
+      "model": "powernetwork:block/pas_operating_lever",
+      "y": 180
+    },
+    "facing=west,open=true": {
       "model": "powernetwork:block/pas_operating_lever",
       "y": 270
     }

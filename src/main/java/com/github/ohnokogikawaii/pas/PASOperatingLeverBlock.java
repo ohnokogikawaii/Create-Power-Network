@@ -4,7 +4,6 @@ package com.github.ohnokogikawaii.pas;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -17,6 +16,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -24,11 +24,12 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class PASOperatingLeverBlock extends Block {
 
-    /**
-     * レバーからPAS本体へ向かう方向。
-     */
     public static final DirectionProperty FACING =
             BlockStateProperties.HORIZONTAL_FACING;
+
+    // PAS本体と同期する状態。true = 開放
+    public static final BooleanProperty OPEN =
+            BooleanProperty.create("open");
 
     private static final VoxelShape SHAPE =
             Block.box(4, 1, 4, 12, 15, 12);
@@ -39,6 +40,7 @@ public class PASOperatingLeverBlock extends Block {
         registerDefaultState(
                 stateDefinition.any()
                         .setValue(FACING, Direction.NORTH)
+                        .setValue(OPEN, false)
         );
     }
 
@@ -46,12 +48,9 @@ public class PASOperatingLeverBlock extends Block {
     protected void createBlockStateDefinition(
             StateDefinition.Builder<Block, BlockState> builder
     ) {
-        builder.add(FACING);
+        builder.add(FACING, OPEN);
     }
 
-    /**
-     * PAS本体の水平側面をクリックした場合のみ設置可能。
-     */
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         Direction clickedFace = context.getClickedFace();
@@ -60,20 +59,20 @@ public class PASOperatingLeverBlock extends Block {
             return null;
         }
 
-        BlockState clickedState =
-                context.getLevel().getBlockState(context.getClickedPos());
+        BlockPos placementPos = context.getClickedPos();
+        BlockPos pasPos = placementPos.relative(clickedFace.getOpposite());
 
-        if (!(clickedState.getBlock() instanceof PASBlock)) {
+        BlockState pasState = context.getLevel().getBlockState(pasPos);
+
+        if (!(pasState.getBlock() instanceof PASBlock)) {
             return null;
         }
 
         return defaultBlockState()
-                .setValue(FACING, clickedFace.getOpposite());
+                .setValue(FACING, clickedFace.getOpposite())
+                .setValue(OPEN, pasState.getValue(PASBlock.OPEN));
     }
 
-    /**
-     * PAS本体が隣接している場合のみ設置を維持する。
-     */
     @Override
     public boolean canSurvive(
             BlockState state,
@@ -108,9 +107,6 @@ public class PASOperatingLeverBlock extends Block {
         );
     }
 
-    /**
-     * レバーを右クリックするとPASを開閉する。
-     */
     @Override
     protected InteractionResult useWithoutItem(
             BlockState state,
