@@ -17,6 +17,7 @@
   "message.powernetwork.wire.same_endpoint": "Cannot connect to the same terminal",
   "message.powernetwork.wire.too_close": "The wire is too short",
   "message.powernetwork.wire.too_long": "The wire is too long",
-  "message.powernetwork.wire.connected": "Copper wire connected"
+  "message.powernetwork.wire.connected": "Copper wire connected",
+  "block.powernetwork.pas_operating_lever": "PAS Operating Lever"
 }
 

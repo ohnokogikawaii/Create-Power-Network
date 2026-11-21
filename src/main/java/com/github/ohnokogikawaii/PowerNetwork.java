@@ -45,6 +45,7 @@ public class PowerNetwork {
                                 output.accept(ModItems.EXTRA_HIGH_VOLTAGE_INSULATOR.get());
                                 output.accept(ModItems.TRANSMISSION_LINE_INSULATOR.get());
                                 output.accept(ModItems.PAS.get());
+                                output.accept(ModItems.PAS_OPERATING_LEVER.get());
                             })
                             .build()
             );

@@ -98,6 +98,12 @@ public final class ModItems {
                     ModBlocks.PAS
             );
 
+    public static final DeferredItem<BlockItem> PAS_OPERATING_LEVER =
+            ITEMS.registerSimpleBlockItem(
+                    "pas_operating_lever",
+                    ModBlocks.PAS_OPERATING_LEVER
+            );
+
     private ModItems() {
     }
 

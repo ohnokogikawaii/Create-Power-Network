@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "powernetwork:block/pas_operating_lever"
+    },
+    "facing=east": {
+      "model": "powernetwork:block/pas_operating_lever",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "powernetwork:block/pas_operating_lever",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "powernetwork:block/pas_operating_lever",
+      "y": 270
+    }
+  }
+}
