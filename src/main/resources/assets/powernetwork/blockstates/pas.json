@@ -1,0 +1,34 @@
+{
+  "variants": {
+    "facing=north,open=false": {
+      "model": "powernetwork:block/pas"
+    },
+    "facing=east,open=false": {
+      "model": "powernetwork:block/pas",
+      "y": 90
+    },
+    "facing=south,open=false": {
+      "model": "powernetwork:block/pas",
+      "y": 180
+    },
+    "facing=west,open=false": {
+      "model": "powernetwork:block/pas",
+      "y": 270
+    },
+    "facing=north,open=true": {
+      "model": "powernetwork:block/pas"
+    },
+    "facing=east,open=true": {
+      "model": "powernetwork:block/pas",
+      "y": 90
+    },
+    "facing=south,open=true": {
+      "model": "powernetwork:block/pas",
+      "y": 180
+    },
+    "facing=west,open=true": {
+      "model": "powernetwork:block/pas",
+      "y": 270
+    }
+  }
+}

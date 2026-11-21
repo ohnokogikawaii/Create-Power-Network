@@ -12,5 +12,6 @@
   "message.powernetwork.wire.first_endpoint": "1つ目の端子を選択しました",
   "message.powernetwork.wire.same_endpoint": "同じ端子には接続できません",
   "message.powernetwork.wire.too_close": "ワイヤーが短すぎます",
-  "message.powernetwork.wire.too_long": "ワイヤーが長すぎます"
+  "message.powernetwork.wire.too_long": "ワイヤーが長すぎます",
+  "block.powernetwork.pas": "柱上高圧気中負荷開閉器"
 }
