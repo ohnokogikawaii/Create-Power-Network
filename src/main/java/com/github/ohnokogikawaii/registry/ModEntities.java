@@ -3,6 +3,7 @@ package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.pas.PASBlockEntity;
+import com.github.ohnokogikawaii.pas.PASControlCableEntity;
 import com.github.ohnokogikawaii.wire.WireBranchConnectorEntity;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -53,7 +54,21 @@ public final class ModEntities {
                             .build("wire_branch_connector")
             );
 
-
+    /**
+     * PASとSOGを接続する専用制御線。
+     */
+    public static final Supplier<EntityType<PASControlCableEntity>>
+            PAS_CONTROL_CABLE =
+            ENTITY_TYPES.register("pas_control_cable", () ->
+                    EntityType.Builder.<PASControlCableEntity>of(
+                                    PASControlCableEntity::new,
+                                    MobCategory.MISC
+                            )
+                            .sized(0.1F, 0.1F)
+                            .clientTrackingRange(64)
+                            .updateInterval(1)
+                            .build("pas_control_cable")
+            );
 
 
     private ModEntities() {

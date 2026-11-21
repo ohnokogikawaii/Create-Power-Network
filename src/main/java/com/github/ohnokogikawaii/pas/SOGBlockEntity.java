@@ -150,6 +150,51 @@ public class SOGBlockEntity extends BlockEntity {
     }
 
     /**
+     * 専用制御線からPASの制御情報を受信する。
+     */
+    public void receiveControlSignalsFromCable(
+            PASControlCableEntity cable,
+            PASControlSignals signals
+    ) {
+        if (!isServerSide()
+                || cable == null
+                || signals == null
+                || !cable.isAlive()) {
+            return;
+        }
+
+        // 制御線モード以外では受信しない。
+        if (controlMode != ControlMode.CONTROL_CABLE) {
+            return;
+        }
+
+        // 接続先を確認する。
+        if (linkedPasPos == null
+                || !worldPosition.equals(cable.getSOGPos())
+                || !linkedPasPos.equals(cable.getPASPos())) {
+            return;
+        }
+
+        // PASとの相互接続を確認する。
+        if (!level.hasChunkAt(linkedPasPos)) {
+            return;
+        }
+
+        BlockEntity entity = level.getBlockEntity(linkedPasPos);
+
+        if (!(entity instanceof PASBlockEntity pas)) {
+            return;
+        }
+
+        if (!worldPosition.equals(pas.getLinkedSogPos())) {
+            return;
+        }
+
+        latestSignals = signals;
+        setChanged();
+    }
+
+    /**
      * PASの現在の制御情報を再取得する。
      */
     /**
