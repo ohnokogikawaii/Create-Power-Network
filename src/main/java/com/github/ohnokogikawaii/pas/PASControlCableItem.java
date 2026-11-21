@@ -153,12 +153,15 @@ public class PASControlCableItem extends Item {
 
         BlockPos pasPos = pas.getBlockPos();
 
-        // 既存のSOG-PAS論理接続を確認する。
-        if (!pasPos.equals(sog.getLinkedPasPos())
-                || !sogPos.equals(pas.getLinkedSogPos())) {
+        // 既に別の機器と接続されていないか確認する。
+        if ((sog.getLinkedPasPos() != null
+                && !pasPos.equals(sog.getLinkedPasPos()))
+                || (pas.getLinkedSogPos() != null
+                && !sogPos.equals(pas.getLinkedSogPos()))) {
+
             player.displayClientMessage(
                     Component.literal(
-                            "先にSOGリンカーで、このSOGとPASを接続してください。"
+                            "SOGまたはPASが別の機器に接続されています。"
                     ),
                     false
             );
@@ -169,7 +172,7 @@ public class PASControlCableItem extends Item {
             return InteractionResult.FAIL;
         }
 
-        // 同じ組み合わせの制御線が既に存在するか確認する。
+        // 同じ組み合わせの制御線が存在するか確認する。
         Vec3 sogCenter = Vec3.atCenterOf(sogPos);
         Vec3 pasCenter = Vec3.atCenterOf(pasPos);
 
@@ -187,6 +190,7 @@ public class PASControlCableItem extends Item {
                                 && pasPos.equals(cable.getPASPos())
                 );
 
+        // 制御線がまだ存在しない場合だけ生成する。
         if (existing.isEmpty()) {
             PASControlCableEntity cable =
                     new PASControlCableEntity(
@@ -206,7 +210,32 @@ public class PASControlCableItem extends Item {
             }
         }
 
-        // 制御線経由の信号伝送に切り替える。
+        /*
+         * 制御線の接続を成立させる。
+         * これによりPASとSOGの論理リンクも自動的に作成される。
+         */
+        if (!sog.linkToPas(pas)) {
+            // 接続に失敗した場合は、今回生成した制御線を削除する。
+            List<PASControlCableEntity> cables =
+                    serverLevel.getEntitiesOfClass(
+                            PASControlCableEntity.class,
+                            searchArea,
+                            cable -> cable.isAlive()
+                                    && sogPos.equals(cable.getSOGPos())
+                                    && pasPos.equals(cable.getPASPos())
+                    );
+
+            for (PASControlCableEntity cable : cables) {
+                cable.discard();
+            }
+
+            player.displayClientMessage(
+                    Component.literal("PASとSOGを接続できませんでした。"),
+                    false
+            );
+            return InteractionResult.FAIL;
+        }
+
         sog.setControlMode(
                 SOGBlockEntity.ControlMode.CONTROL_CABLE
         );
@@ -223,7 +252,7 @@ public class PASControlCableItem extends Item {
 
         player.displayClientMessage(
                 Component.literal(
-                        "PASとSOGの制御線を接続しました。"
+                        "PASとSOGを制御線で接続しました。"
                 ),
                 false
         );

@@ -7,6 +7,8 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 public class SOGBlockEntity extends BlockEntity {
 
@@ -237,15 +239,14 @@ public class SOGBlockEntity extends BlockEntity {
     /**
      * SOGからPASへ開放指令を送る共通入口。
      *
-     * 現段階ではDIRECTのみ動作する。
-     * CONTROL_CABLEは専用制御線の実装後に有効化する。
+     * DIRECT:
+     * PASへ直接開放指令を送る。
+     *
+     * CONTROL_CABLE:
+     * 実際に接続されている専用制御線を経由して開放指令を送る。
      */
     public boolean requestTrip() {
         if (!isServerSide() || linkedPasPos == null) {
-            return false;
-        }
-
-        if (controlMode != ControlMode.DIRECT) {
             return false;
         }
 
@@ -253,9 +254,8 @@ public class SOGBlockEntity extends BlockEntity {
             return false;
         }
 
-        BlockEntity entity = level.getBlockEntity(linkedPasPos);
-
-        if (!(entity instanceof PASBlockEntity pas)) {
+        if (!(level.getBlockEntity(linkedPasPos)
+                instanceof PASBlockEntity pas)) {
             return false;
         }
 
@@ -263,11 +263,39 @@ public class SOGBlockEntity extends BlockEntity {
             return false;
         }
 
-        pas.setOpen(true);
+        // 直接接続の場合
+        if (controlMode == ControlMode.DIRECT) {
+            pas.setOpen(true);
+            refreshControlSignals();
+            return pas.isOpen();
+        }
 
-        refreshControlSignals();
+        // 専用制御線の場合
+        if (controlMode == ControlMode.CONTROL_CABLE) {
+            Vec3 sogCenter = Vec3.atCenterOf(worldPosition);
+            Vec3 pasCenter = Vec3.atCenterOf(linkedPasPos);
 
-        return pas.isOpen();
+            AABB searchArea = new AABB(
+                    sogCenter,
+                    pasCenter
+            ).inflate(1.0);
+
+            var cables = level.getEntitiesOfClass(
+                    PASControlCableEntity.class,
+                    searchArea,
+                    cable -> cable.isAlive()
+                            && worldPosition.equals(cable.getSOGPos())
+                            && linkedPasPos.equals(cable.getPASPos())
+            );
+
+            for (PASControlCableEntity cable : cables) {
+                if (cable.requestTripFromSog(this)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     @Override
