@@ -4,8 +4,12 @@ package com.github.ohnokogikawaii.pas;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.BaseEntityBlock;
@@ -115,6 +119,47 @@ public class SOGBlock extends BaseEntityBlock {
             StateDefinition.Builder<Block, BlockState> builder
     ) {
         builder.add(FACING);
+    }
+
+    /**
+     * テスト用：
+     * SOGを素手で右クリックするとPASへ開放指令を送る。
+     */
+    @Override
+    public InteractionResult useWithoutItem(
+            BlockState state,
+            Level level,
+            BlockPos pos,
+            Player player,
+            net.minecraft.world.phys.BlockHitResult hit
+    ) {
+        BlockEntity entity = level.getBlockEntity(pos);
+
+        if (!(entity instanceof SOGBlockEntity sog)) {
+            return InteractionResult.PASS;
+        }
+
+// 未リンクの場合は開放指令を実行しない。
+// PASControlCableItemによる接続操作を優先する。
+        if (sog.getLinkedPasPos() == null) {
+            return InteractionResult.PASS;
+        }
+
+        boolean success = sog.requestTrip();
+
+        if (success) {
+            player.displayClientMessage(
+                    Component.literal("SOG: PASへの開放指令に成功しました。"),
+                    true
+            );
+        } else {
+            player.displayClientMessage(
+                    Component.literal("SOG: 開放指令に失敗しました。接続状態を確認してください。"),
+                    true
+            );
+        }
+
+        return InteractionResult.CONSUME;
     }
 
     @Override
