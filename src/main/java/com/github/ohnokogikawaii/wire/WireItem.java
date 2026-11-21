@@ -1225,7 +1225,7 @@ public class WireItem extends Item {
             }
         }
 
-// 中間支持点の存在と容量を事前確認
+        // 中間支持点の存在と容量を事前確認
         for (InsulatorSelection support : route.supports) {
             if (!(level.getBlockEntity(support.pos())
                     instanceof InsulatorBlockEntity be)
@@ -1243,7 +1243,7 @@ public class WireItem extends Item {
         }
 
         // 碍子間の既存電線を確認する。
-// 中間支持点も含めて判定する。
+        // 中間支持点も含めて判定する。
         if (level.getBlockState(start.anchor()).getBlock()
                 instanceof InsulatorBlock
                 && level.getBlockState(end.anchor()).getBlock()

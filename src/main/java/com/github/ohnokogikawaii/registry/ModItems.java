@@ -92,6 +92,12 @@ public final class ModItems {
                     ModBlocks.TRANSMISSION_LINE_INSULATOR
             );
 
+    public static final DeferredItem<BlockItem> PAS =
+            ITEMS.registerSimpleBlockItem(
+                    "pas",
+                    ModBlocks.PAS
+            );
+
     private ModItems() {
     }
 

@@ -2,11 +2,13 @@
 package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
+import com.github.ohnokogikawaii.pas.PASBlockEntity;
 import com.github.ohnokogikawaii.wire.WireBranchConnectorEntity;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -50,6 +52,9 @@ public final class ModEntities {
                             .updateInterval(1)
                             .build("wire_branch_connector")
             );
+
+
+
 
     private ModEntities() {
     }

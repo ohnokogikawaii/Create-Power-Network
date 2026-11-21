@@ -3,6 +3,7 @@ package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.insulator.InsulatorBlockEntity;
+import com.github.ohnokogikawaii.pas.PASBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.IEventBus;
@@ -30,6 +31,18 @@ public final class ModBlockEntities {
                             ModBlocks.HIGH_VOLTAGE_INSULATOR.get(),
                             ModBlocks.EXTRA_HIGH_VOLTAGE_INSULATOR.get(),
                             ModBlocks.TRANSMISSION_LINE_INSULATOR.get()
+                    ).build(null)
+            );
+
+    /**
+     * 柱上高圧気中負荷開閉器のBlockEntity。
+     */
+    public static final Supplier<BlockEntityType<PASBlockEntity>> PAS =
+            BLOCK_ENTITY_TYPES.register(
+                    "pas",
+                    () -> BlockEntityType.Builder.of(
+                            PASBlockEntity::new,
+                            ModBlocks.PAS.get()
                     ).build(null)
             );
 
