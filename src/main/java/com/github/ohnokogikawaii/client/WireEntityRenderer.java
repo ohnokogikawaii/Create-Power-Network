@@ -12,6 +12,8 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
+import com.github.ohnokogikawaii.insulator.InsulatorBlock;
+import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -187,6 +189,235 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                         u1, v0, packedLight
                 );
             }
+        }
+        /*
+         * 碍子に接続された端点へ端末金具を描画する。
+         */
+        ResourceLocation metalTexture =
+                ResourceLocation.fromNamespaceAndPath(
+                        "minecraft",
+                        "textures/block/iron_block.png"
+                );
+
+        VertexConsumer metalBuffer = bufferSource.getBuffer(
+                RenderType.entityCutoutNoCull(metalTexture)
+        );
+
+        if (entity.isTerminalA()) {
+            InsulatorBlock.Type type =
+                    getEndpointInsulatorType(
+                            entity,
+                            entity.getEndpointA()
+                    );
+
+            if (type != null) {
+                Vec3 tangent = getTangent(centers, 0);
+
+                renderTerminalFitting(
+                        metalBuffer,
+                        pose,
+                        a,
+                        tangent,
+                        radius,
+                        type,
+                        packedLight
+                );
+            }
+        }
+
+        if (entity.isTerminalB()) {
+            InsulatorBlock.Type type =
+                    getEndpointInsulatorType(
+                            entity,
+                            entity.getEndpointB()
+                    );
+
+            if (type != null) {
+                Vec3 tangent = getTangent(
+                        centers,
+                        centers.size() - 1
+                ).scale(-1.0);
+
+                renderTerminalFitting(
+                        metalBuffer,
+                        pose,
+                        b,
+                        tangent,
+                        radius,
+                        type,
+                        packedLight
+                );
+            }
+        }
+    }
+
+    /**
+     * 指定された端点が接続している碍子の種類を取得する。
+     */
+    private static InsulatorBlock.Type getEndpointInsulatorType(
+            WireEntity entity,
+            BlockPos endpoint
+    ) {
+        if (!entity.level().hasChunkAt(endpoint)) {
+            return null;
+        }
+
+        if (entity.level().getBlockState(endpoint).getBlock()
+                instanceof InsulatorBlock insulator) {
+            return insulator.getInsulatorType();
+        }
+
+        return null;
+    }
+
+    /**
+     * 碍子の種類に応じた端末金具を描画する。
+     *
+     * directionは端点から電線本体へ向かう方向。
+     */
+    private static void renderTerminalFitting(
+            VertexConsumer buffer,
+            PoseStack.Pose pose,
+            Vec3 endpoint,
+            Vec3 direction,
+            double wireRadius,
+            InsulatorBlock.Type type,
+            int packedLight
+    ) {
+        double length;
+        double radiusMultiplier;
+        double minimumRadius;
+
+        switch (type) {
+            case LOW_VOLTAGE -> {
+                length = 0.14;
+                radiusMultiplier = 1.8;
+                minimumRadius = 0.035;
+            }
+            case HIGH_VOLTAGE -> {
+                length = 0.18;
+                radiusMultiplier = 2.0;
+                minimumRadius = 0.045;
+            }
+            case EXTRA_HIGH_VOLTAGE -> {
+                length = 0.23;
+                radiusMultiplier = 2.3;
+                minimumRadius = 0.055;
+            }
+            case TRANSMISSION_LINE -> {
+                length = 0.30;
+                radiusMultiplier = 2.6;
+                minimumRadius = 0.065;
+            }
+            default -> {
+                return;
+            }
+        }
+
+        double fittingRadius = Math.max(
+                wireRadius * radiusMultiplier,
+                minimumRadius
+        );
+
+        Vec3 axis = direction.normalize();
+
+        if (axis.lengthSqr() < 1.0E-8) {
+            return;
+        }
+
+        /*
+         * 金具は端点から電線側へ配置する。
+         */
+        Vec3 center = endpoint.add(
+                axis.scale(length * 0.5)
+        );
+
+        renderCylinder(
+                buffer,
+                pose,
+                center,
+                axis,
+                fittingRadius,
+                length,
+                packedLight
+        );
+    }
+
+    /**
+     * 任意方向の円筒形状を描画する。
+     */
+    private static void renderCylinder(
+            VertexConsumer buffer,
+            PoseStack.Pose pose,
+            Vec3 center,
+            Vec3 axis,
+            double radius,
+            double length,
+            int packedLight
+    ) {
+        Vec3 reference = Math.abs(axis.y) < 0.95
+                ? new Vec3(0, 1, 0)
+                : new Vec3(1, 0, 0);
+
+        Vec3 side = axis.cross(reference).normalize();
+        Vec3 up = axis.cross(side).normalize();
+
+        Vec3 start = center.subtract(
+                axis.scale(length * 0.5)
+        );
+
+        Vec3 end = center.add(
+                axis.scale(length * 0.5)
+        );
+
+        for (int i = 0; i < RADIAL_SEGMENTS; i++) {
+            double angle0 =
+                    2.0 * Math.PI * i / RADIAL_SEGMENTS;
+
+            double angle1 =
+                    2.0 * Math.PI * (i + 1) / RADIAL_SEGMENTS;
+
+            Vec3 normal0 = ringNormal(side, up, angle0);
+            Vec3 normal1 = ringNormal(side, up, angle1);
+
+            Vec3 start0 = start.add(
+                    normal0.scale(radius)
+            );
+
+            Vec3 start1 = start.add(
+                    normal1.scale(radius)
+            );
+
+            Vec3 end0 = end.add(
+                    normal0.scale(radius)
+            );
+
+            Vec3 end1 = end.add(
+                    normal1.scale(radius)
+            );
+
+            float u0 = (float) i / RADIAL_SEGMENTS;
+            float u1 = (float) (i + 1) / RADIAL_SEGMENTS;
+
+            addVertex(
+                    buffer, pose, start0, normal0,
+                    u0, 1.0F, packedLight
+            );
+
+            addVertex(
+                    buffer, pose, start1, normal1,
+                    u1, 1.0F, packedLight
+            );
+
+            addVertex(
+                    buffer, pose, end1, normal1,
+                    u1, 0.0F, packedLight
+            );
+
+            addVertex(
+                    buffer, pose, end0, normal0,
+                    u0, 0.0F, packedLight
+            );
         }
     }
 

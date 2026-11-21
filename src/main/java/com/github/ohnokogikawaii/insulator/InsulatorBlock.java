@@ -42,6 +42,10 @@ public class InsulatorBlock extends BaseEntityBlock
 
     private final Type type;
 
+    public Type getInsulatorType() {
+        return type;
+    }
+
     private static final VoxelShape LOW_SHAPE = Shapes.or(
             Block.box(4, 0, 4, 12, 2, 12),
             Block.box(6, 2, 6, 10, 8, 10),
