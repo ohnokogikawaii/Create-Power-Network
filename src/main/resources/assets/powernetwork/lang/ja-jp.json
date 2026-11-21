@@ -14,5 +14,6 @@
   "message.powernetwork.wire.too_close": "ワイヤーが短すぎます",
   "message.powernetwork.wire.too_long": "ワイヤーが長すぎます",
   "block.powernetwork.pas": "柱上高圧気中負荷開閉器",
-  "block.powernetwork.pas_operating_lever": "PAS操作レバー"
+  "block.powernetwork.pas_operating_lever": "PAS操作レバー",
+  "block.powernetwork.pas_operating_rope": "PAS操作紐"
 }

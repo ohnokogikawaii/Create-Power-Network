@@ -104,6 +104,12 @@ public final class ModItems {
                     ModBlocks.PAS_OPERATING_LEVER
             );
 
+    public static final DeferredItem<BlockItem> PAS_OPERATING_ROPE =
+            ITEMS.registerSimpleBlockItem(
+                    "pas_operating_rope",
+                    ModBlocks.PAS_OPERATING_ROPE
+            );
+
     private ModItems() {
     }
 

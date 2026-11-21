@@ -6,6 +6,7 @@ import com.github.ohnokogikawaii.hub_connector.HubConnectorBlock;
 import com.github.ohnokogikawaii.insulator.InsulatorBlock;
 import com.github.ohnokogikawaii.pas.PASBlock;
 import com.github.ohnokogikawaii.pas.PASOperatingLeverBlock;
+import com.github.ohnokogikawaii.pas.PASOperatingRopeBlock;
 import com.github.ohnokogikawaii.terminal.TerminalBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -84,6 +85,17 @@ public final class ModBlocks {
                             .mapColor(MapColor.METAL)
                             .strength(1.5F, 3.0F)
                             .noOcclusion()
+            );
+
+    public static final DeferredBlock<PASOperatingRopeBlock> PAS_OPERATING_ROPE =
+            BLOCKS.registerBlock(
+                    "pas_operating_rope",
+                    PASOperatingRopeBlock::new,
+                    BlockBehaviour.Properties.of()
+                            .mapColor(MapColor.METAL)
+                            .strength(0.5F)
+                            .noOcclusion()
+                            .noCollission()
             );
 
     private static BlockBehaviour.Properties insulatorProperties() {
