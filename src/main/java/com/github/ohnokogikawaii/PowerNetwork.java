@@ -49,6 +49,7 @@ public class PowerNetwork {
                                 output.accept(ModItems.PAS_OPERATING_ROPE.get());
                                 output.accept(ModItems.SOG.get());
                                 output.accept(ModItems.SOG_LINKER.get());
+                                output.accept(ModItems.PAS_CONTROL_CABLE.get());
                             })
                             .build()
             );

@@ -1,6 +1,7 @@
 
 package com.github.ohnokogikawaii;
 
+import com.github.ohnokogikawaii.client.PASControlCableRenderer;
 import com.github.ohnokogikawaii.client.WireBranchConnectorRenderer;
 import com.github.ohnokogikawaii.client.WireEntityRenderer;
 import com.github.ohnokogikawaii.registry.ModEntities;
@@ -50,7 +51,14 @@ public final class PowerNetworkClient {
                 ModEntities.WIRE_BRANCH_CONNECTOR.get(),
                 WireBranchConnectorRenderer::new
         );
+
+        event.registerEntityRenderer(
+                ModEntities.PAS_CONTROL_CABLE.get(),
+                PASControlCableRenderer::new
+        );
     }
+
+
 
     /**
      * 分岐コネクタのモデルを追加登録する。

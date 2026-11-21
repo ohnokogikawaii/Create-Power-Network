@@ -1,6 +1,7 @@
 package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
+import com.github.ohnokogikawaii.pas.PASControlCableItem;
 import com.github.ohnokogikawaii.pas.SOGLinkerItem;
 import com.github.ohnokogikawaii.wire.WireBranchConnectorItem;
 import com.github.ohnokogikawaii.wire.WireCutterItem;
@@ -121,6 +122,15 @@ public final class ModItems {
             ITEMS.register(
                     "sog_linker",
                     () -> new SOGLinkerItem(
+                            new Item.Properties().stacksTo(1)
+                    )
+            );
+
+    public static final DeferredItem<PASControlCableItem>
+            PAS_CONTROL_CABLE =
+            ITEMS.register(
+                    "pas_control_cable",
+                    () -> new PASControlCableItem(
                             new Item.Properties().stacksTo(1)
                     )
             );

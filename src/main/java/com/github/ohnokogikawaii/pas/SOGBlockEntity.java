@@ -190,6 +190,11 @@ public class SOGBlockEntity extends BlockEntity {
             return;
         }
 
+        // 信号に変化があった場合だけ更新する。
+        if (signals.equals(latestSignals)) {
+            return;
+        }
+
         latestSignals = signals;
         setChanged();
     }
