@@ -13,6 +13,21 @@ public class SOGBlockEntity extends BlockEntity {
     private static final String LINKED_PAS_TAG = "LinkedPAS";
     private static final String CONTROL_MODE_TAG = "ControlMode";
 
+    private static final String SIGNAL_POWER_TAG =
+            "SignalControlPower";
+
+    private static final String SIGNAL_ZCT_TAG =
+            "SignalZCT";
+
+    private static final String SIGNAL_ZPD_TAG =
+            "SignalZPD";
+
+    private static final String SIGNAL_OVERCURRENT_TAG =
+            "SignalOvercurrent";
+
+    private static final String SIGNAL_PAS_OPEN_TAG =
+            "SignalPASOpen";
+
     private BlockPos linkedPasPos;
 
     public enum ControlMode {
@@ -21,6 +36,9 @@ public class SOGBlockEntity extends BlockEntity {
     }
 
     private ControlMode controlMode = ControlMode.DIRECT;
+
+    private PASControlSignals latestSignals =
+            PASControlSignals.NONE;
 
     public SOGBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.SOG.get(), pos, state);
@@ -34,8 +52,12 @@ public class SOGBlockEntity extends BlockEntity {
         return controlMode;
     }
 
+    public PASControlSignals getLatestSignals() {
+        return latestSignals;
+    }
+
     public void setControlMode(ControlMode mode) {
-        if (level == null || level.isClientSide || mode == null) {
+        if (!isServerSide() || mode == null) {
             return;
         }
 
@@ -43,13 +65,16 @@ public class SOGBlockEntity extends BlockEntity {
         setChanged();
     }
 
+    private boolean isServerSide() {
+        return level != null && !level.isClientSide;
+    }
+
     /**
      * SOGとPASを相互に紐付ける。
-     * 既存の接続先が読み込まれていない場合は変更しない。
+     * 双方が別の機器に接続済みの場合は拒否する。
      */
-
     public boolean linkToPas(PASBlockEntity pas) {
-        if (level == null || level.isClientSide || pas == null) {
+        if (!isServerSide() || pas == null) {
             return false;
         }
 
@@ -59,19 +84,17 @@ public class SOGBlockEntity extends BlockEntity {
 
         BlockPos newPasPos = pas.getBlockPos();
 
-        // 同じPASへの再接続は許可する。
         if (newPasPos.equals(linkedPasPos)
                 && worldPosition.equals(pas.getLinkedSogPos())) {
+            pas.publishControlSignals();
             return true;
         }
 
-        // SOGが既に別のPASに接続されている場合は拒否。
         if (linkedPasPos != null
                 && !linkedPasPos.equals(newPasPos)) {
             return false;
         }
 
-        // PASが既に別のSOGに接続されている場合は拒否。
         BlockPos existingSogPos = pas.getLinkedSogPos();
 
         if (existingSogPos != null
@@ -79,38 +102,76 @@ public class SOGBlockEntity extends BlockEntity {
             return false;
         }
 
-        // 双方の接続先を確認できた場合だけ登録する。
         linkedPasPos = newPasPos;
         pas.setLinkedSogPos(worldPosition);
 
         setChanged();
         pas.setChanged();
 
+        pas.publishControlSignals();
+
         return true;
     }
 
-
     public void clearLinkedPasIfMatches(BlockPos pasPos) {
-        if (linkedPasPos == null || !linkedPasPos.equals(pasPos)) {
+        if (linkedPasPos == null
+                || !linkedPasPos.equals(pasPos)) {
             return;
         }
 
         linkedPasPos = null;
+        latestSignals = PASControlSignals.NONE;
         setChanged();
+    }
+
+    /**
+     * PASから制御情報を受信する。
+     */
+    public void receiveControlSignals(PASControlSignals signals) {
+        if (!isServerSide() || signals == null) {
+            return;
+        }
+
+        latestSignals = signals;
+        setChanged();
+    }
+
+    /**
+     * PASの現在の制御情報を再取得する。
+     */
+    public boolean refreshControlSignals() {
+        if (!isServerSide() || linkedPasPos == null) {
+            return false;
+        }
+
+        if (!level.hasChunkAt(linkedPasPos)) {
+            return false;
+        }
+
+        BlockEntity entity = level.getBlockEntity(linkedPasPos);
+
+        if (!(entity instanceof PASBlockEntity pas)) {
+            return false;
+        }
+
+        if (!worldPosition.equals(pas.getLinkedSogPos())) {
+            return false;
+        }
+
+        latestSignals = pas.getControlSignals();
+        setChanged();
+
+        return true;
     }
 
     /**
      * SOGからPASへ開放指令を送る共通入口。
      *
-     * DIRECT:
-     *   現段階で使用する直接制御。
-     *
-     * CONTROL_CABLE:
-     *   将来の制御線ネットワーク実装用。
-     *   現段階では未実装なので動作させない。
+     * 現段階ではDIRECTのみ動作する。
+     * CONTROL_CABLEは専用制御線の実装後に有効化する。
      */
     public boolean requestTrip() {
-        if (level == null || level.isClientSide || linkedPasPos == null) {
+        if (!isServerSide() || linkedPasPos == null) {
             return false;
         }
 
@@ -128,8 +189,15 @@ public class SOGBlockEntity extends BlockEntity {
             return false;
         }
 
+        if (!worldPosition.equals(pas.getLinkedSogPos())) {
+            return false;
+        }
+
         pas.setOpen(true);
-        return true;
+
+        refreshControlSignals();
+
+        return pas.isOpen();
     }
 
     @Override
@@ -140,10 +208,41 @@ public class SOGBlockEntity extends BlockEntity {
         super.saveAdditional(tag, registries);
 
         if (linkedPasPos != null) {
-            tag.putLong(LINKED_PAS_TAG, linkedPasPos.asLong());
+            tag.putLong(
+                    LINKED_PAS_TAG,
+                    linkedPasPos.asLong()
+            );
         }
 
-        tag.putString(CONTROL_MODE_TAG, controlMode.name());
+        tag.putString(
+                CONTROL_MODE_TAG,
+                controlMode.name()
+        );
+
+        tag.putBoolean(
+                SIGNAL_POWER_TAG,
+                latestSignals.controlPowerAvailable()
+        );
+
+        tag.putBoolean(
+                SIGNAL_ZCT_TAG,
+                latestSignals.zeroSequenceCurrentDetected()
+        );
+
+        tag.putBoolean(
+                SIGNAL_ZPD_TAG,
+                latestSignals.zeroSequenceVoltageDetected()
+        );
+
+        tag.putBoolean(
+                SIGNAL_OVERCURRENT_TAG,
+                latestSignals.overcurrentDetected()
+        );
+
+        tag.putBoolean(
+                SIGNAL_PAS_OPEN_TAG,
+                latestSignals.pasOpen()
+        );
     }
 
     @Override
@@ -164,5 +263,13 @@ public class SOGBlockEntity extends BlockEntity {
         } catch (IllegalArgumentException exception) {
             controlMode = ControlMode.DIRECT;
         }
+
+        latestSignals = new PASControlSignals(
+                tag.getBoolean(SIGNAL_POWER_TAG),
+                tag.getBoolean(SIGNAL_ZCT_TAG),
+                tag.getBoolean(SIGNAL_ZPD_TAG),
+                tag.getBoolean(SIGNAL_OVERCURRENT_TAG),
+                tag.getBoolean(SIGNAL_PAS_OPEN_TAG)
+        );
     }
 }
