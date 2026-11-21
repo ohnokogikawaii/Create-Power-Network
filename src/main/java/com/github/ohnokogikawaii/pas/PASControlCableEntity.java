@@ -107,13 +107,13 @@ public class PASControlCableEntity extends Entity {
 
         if (!(level().getBlockEntity(pasPos)
                 instanceof PASBlockEntity pas)) {
-            discard();
+            disconnect();
             return;
         }
 
         if (!(level().getBlockEntity(sogPos)
                 instanceof SOGBlockEntity sog)) {
-            discard();
+            disconnect();
             return;
         }
 
@@ -122,7 +122,7 @@ public class PASControlCableEntity extends Entity {
          */
         if (!sogPos.equals(pas.getLinkedSogPos())
                 || !pasPos.equals(sog.getLinkedPasPos())) {
-            discard();
+            disconnect();
             return;
         }
 
@@ -207,5 +207,40 @@ public class PASControlCableEntity extends Entity {
                 pas.x, pas.y, pas.z,
                 sog.x, sog.y, sog.z
         ).inflate(1.0);
+    }
+
+    /**
+     * 制御ケーブルを切断し、PASとSOGのリンクを解除する。
+     */
+    public void disconnect() {
+        if (level().isClientSide()) {
+            return;
+        }
+
+        BlockPos pasPos = getPASPos();
+        BlockPos sogPos = getSOGPos();
+
+        // PAS側のリンクを解除
+        if (level().hasChunkAt(pasPos)) {
+            if (level().getBlockEntity(pasPos)
+                    instanceof PASBlockEntity pas) {
+                pas.clearLinkedSogIfMatches(sogPos);
+            }
+        }
+
+        // SOG側のリンクと受信信号を解除
+        if (level().hasChunkAt(sogPos)) {
+            if (level().getBlockEntity(sogPos)
+                    instanceof SOGBlockEntity sog) {
+                if (pasPos.equals(sog.getLinkedPasPos())) {
+                    sog.clearLinkedPasIfMatches(pasPos);
+                    sog.setControlMode(
+                            SOGBlockEntity.ControlMode.DIRECT
+                    );
+                }
+            }
+        }
+
+        discard();
     }
 }

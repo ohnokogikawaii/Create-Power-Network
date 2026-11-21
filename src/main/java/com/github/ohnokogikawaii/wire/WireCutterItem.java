@@ -1,5 +1,6 @@
 package com.github.ohnokogikawaii.wire;
 
+import com.github.ohnokogikawaii.pas.PASControlCableEntity;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -31,6 +32,13 @@ public class WireCutterItem extends Item {
     ) {
     }
 
+    private record ControlCableHit(
+            PASControlCableEntity cable,
+            double distanceAlongRay,
+            double distanceToRay
+    ) {
+    }
+
     public WireCutterItem(Properties properties) {
         super(properties);
     }
@@ -44,8 +52,40 @@ public class WireCutterItem extends Item {
         ItemStack stack = player.getItemInHand(hand);
         WireHit hit = findWireHit(level, player);
 
-        if (hit == null) {
+        ControlCableHit controlCableHit =
+                findControlCableHit(level, player);
+
+        if (hit == null && controlCableHit == null) {
             return InteractionResultHolder.pass(stack);
+        }
+
+        if (level.isClientSide()) {
+            return InteractionResultHolder.sidedSuccess(stack, true);
+        }
+
+// 制御ケーブルと電力線の両方が候補になった場合、
+// 視線に近い方を切断する。
+        if (controlCableHit != null
+                && (hit == null
+                || controlCableHit.distanceAlongRay()
+                <= hit.distanceAlongRay())) {
+
+            PASControlCableEntity cable =
+                    controlCableHit.cable();
+
+            if (!cable.isAlive()) {
+                return InteractionResultHolder.pass(stack);
+            }
+
+            cable.disconnect();
+
+            player.displayClientMessage(
+                    Component.literal("制御ケーブルを切断しました。")
+                            .withStyle(ChatFormatting.GREEN),
+                    true
+            );
+
+            return InteractionResultHolder.success(stack);
         }
 
         if (level.isClientSide()) {
@@ -73,6 +113,87 @@ public class WireCutterItem extends Item {
         );
 
         return InteractionResultHolder.success(stack);
+    }
+
+    /**
+     * 視線上にある制御ケーブルを検索する。
+     */
+    private ControlCableHit findControlCableHit(
+            Level level,
+            Player player
+    ) {
+        Vec3 eye = player.getEyePosition();
+        Vec3 look = player.getViewVector(1.0F).normalize();
+        Vec3 rayEnd = eye.add(look.scale(REACH));
+
+        AABB searchArea = new AABB(eye, rayEnd).inflate(64.0);
+
+        ControlCableHit bestHit = null;
+
+        for (PASControlCableEntity cable :
+                level.getEntitiesOfClass(
+                        PASControlCableEntity.class,
+                        searchArea,
+                        Entity::isAlive
+                )) {
+
+            Vec3 a = Vec3.atCenterOf(cable.getPASPos());
+            Vec3 b = Vec3.atCenterOf(cable.getSOGPos());
+
+            double length = a.distanceTo(b);
+
+            if (length < 0.001) {
+                continue;
+            }
+
+            double sag = Math.min(0.25, length * 0.025);
+
+            for (int i = 0; i <= 32; i++) {
+                double t = (double) i / 32.0;
+
+                Vec3 point = a.lerp(b, t);
+
+                point = point.add(
+                        0,
+                        -4.0 * sag * t * (1.0 - t),
+                        0
+                );
+
+                Vec3 fromEye = point.subtract(eye);
+
+                double alongRay = fromEye.dot(look);
+
+                if (alongRay < 0.0 || alongRay > REACH) {
+                    continue;
+                }
+
+                Vec3 closestOnRay = eye.add(
+                        look.scale(alongRay)
+                );
+
+                double distance = point.distanceTo(closestOnRay);
+
+                if (distance > MAX_HIT_DISTANCE) {
+                    continue;
+                }
+
+                if (bestHit == null
+                        || alongRay < bestHit.distanceAlongRay()
+                        || (Math.abs(
+                        alongRay - bestHit.distanceAlongRay()
+                ) < 1.0E-6
+                        && distance < bestHit.distanceToRay())) {
+
+                    bestHit = new ControlCableHit(
+                            cable,
+                            alongRay,
+                            distance
+                    );
+                }
+            }
+        }
+
+        return bestHit;
     }
 
     /**
