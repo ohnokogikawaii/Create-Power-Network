@@ -1,6 +1,6 @@
+
 package com.github.ohnokogikawaii.insulator;
 
-import com.github.ohnokogikawaii.registry.ModBlockEntities;
 import com.github.ohnokogikawaii.wire.WireConnectionPointProvider;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
@@ -22,6 +22,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.List;
+import java.util.Map;
 
 public class StrainInsulatorBlock extends BaseEntityBlock
         implements WireConnectionPointProvider {
@@ -29,13 +30,49 @@ public class StrainInsulatorBlock extends BaseEntityBlock
     public static final DirectionProperty FACING =
             BlockStateProperties.HORIZONTAL_FACING;
 
-    private static final VoxelShape SHAPE = Shapes.or(
-            Block.box(3, 6, 1, 13, 10, 15),
-            Block.box(4, 5, 3, 12, 11, 5),
-            Block.box(4, 5, 7, 12, 11, 9),
-            Block.box(4, 5, 11, 12, 11, 13),
-            Block.box(6, 4, 0, 10, 12, 2),
-            Block.box(6, 4, 14, 10, 12, 16)
+    /*
+     * strain_insulator.json の17個のelementを反映した形状。
+     * Blockbenchの座標は0～16スケール。
+     */
+    private static final VoxelShape BASE_SHAPE = Shapes.or(
+            // 奥側の碍子本体
+            Block.box(6, 5, 11.75, 10, 9, 15.75),
+
+            // 奥側の接続部
+            Block.box(6.5, 5.5, 11, 9.5, 8.5, 11.75),
+            Block.box(7.25, 6.25, 10.25, 8.75, 7.75, 11.25),
+            Block.box(7.25, 6.25, 15.25, 8.75, 7.75, 16),
+
+            // 手前側の碍子本体
+            Block.box(6, 5, 6.25, 10, 9, 10.25),
+
+            // 手前側の接続部
+            Block.box(6.5, 5.5, 5.5, 9.5, 8.5, 6.25),
+            Block.box(7.5, 6.5, 4.75, 8.5, 7.5, 5.75),
+
+            // 端部の結線金具
+            Block.box(7, 6, 0, 7.75, 8, 0.75),
+            Block.box(7.75, 6.75, 0.5, 8.25, 7.25, 0.75),
+            Block.box(8.25, 6, 0, 9, 8, 0.75),
+            Block.box(7.75, 6, 0, 8.25, 6.75, 0.75),
+            Block.box(7.75, 7.25, 0, 8.25, 8, 0.75),
+
+            // 本体と段差部分
+            Block.box(7, 6, 0.75, 9, 8, 4.75),
+            Block.box(7, 8, 0.75, 9, 9, 1.75),
+            Block.box(7, 8, 1.75, 9, 10, 2.75),
+            Block.box(7, 8, 2.75, 9, 11, 3.75),
+            Block.box(7, 8, 3.75, 9, 11.5, 4.75)
+    );
+
+    /*
+     * ブロックの向きに合わせた当たり判定。
+     */
+    private static final Map<Direction, VoxelShape> SHAPES = Map.of(
+            Direction.NORTH, BASE_SHAPE,
+            Direction.SOUTH, rotateShape(BASE_SHAPE, Direction.SOUTH),
+            Direction.EAST, rotateShape(BASE_SHAPE, Direction.EAST),
+            Direction.WEST, rotateShape(BASE_SHAPE, Direction.WEST)
     );
 
     public StrainInsulatorBlock(Properties properties) {
@@ -107,7 +144,7 @@ public class StrainInsulatorBlock extends BaseEntityBlock
     }
 
     /**
-     * 向きに応じて接続点を回転する。
+     * 接続点をブロックの向きに合わせて回転する。
      */
     private static Vec3 rotatePosition(
             Vec3 position,
@@ -133,6 +170,64 @@ public class StrainInsulatorBlock extends BaseEntityBlock
         };
     }
 
+    /**
+     * 北向き基準のVoxelShapeを、接続点と同じ規則で回転する。
+     */
+    private static VoxelShape rotateShape(
+            VoxelShape source,
+            Direction facing
+    ) {
+        VoxelShape result = Shapes.empty();
+
+        for (AABB box : source.toAabbs()) {
+            double minX;
+            double maxX;
+            double minZ;
+            double maxZ;
+
+            switch (facing) {
+                case SOUTH -> {
+                    minX = 1.0 - box.maxX;
+                    maxX = 1.0 - box.minX;
+                    minZ = 1.0 - box.maxZ;
+                    maxZ = 1.0 - box.minZ;
+                }
+                case EAST -> {
+                    minX = 1.0 - box.maxZ;
+                    maxX = 1.0 - box.minZ;
+                    minZ = box.minX;
+                    maxZ = box.maxX;
+                }
+                case WEST -> {
+                    minX = box.minZ;
+                    maxX = box.maxZ;
+                    minZ = 1.0 - box.maxX;
+                    maxZ = 1.0 - box.minX;
+                }
+                default -> {
+                    minX = box.minX;
+                    maxX = box.maxX;
+                    minZ = box.minZ;
+                    maxZ = box.maxZ;
+                }
+            }
+
+            result = Shapes.or(
+                    result,
+                    Shapes.box(
+                            minX,
+                            box.minY,
+                            minZ,
+                            maxX,
+                            box.maxY,
+                            maxZ
+                    )
+            );
+        }
+
+        return result;
+    }
+
     @Override
     public VoxelShape getShape(
             BlockState state,
@@ -140,7 +235,7 @@ public class StrainInsulatorBlock extends BaseEntityBlock
             BlockPos pos,
             CollisionContext context
     ) {
-        return SHAPE;
+        return SHAPES.get(state.getValue(FACING));
     }
 
     @Override
@@ -150,7 +245,7 @@ public class StrainInsulatorBlock extends BaseEntityBlock
             BlockPos pos,
             CollisionContext context
     ) {
-        return SHAPE;
+        return SHAPES.get(state.getValue(FACING));
     }
 
     @Override
