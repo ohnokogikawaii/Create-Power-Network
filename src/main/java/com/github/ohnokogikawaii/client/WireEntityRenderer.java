@@ -1,6 +1,7 @@
 
 package com.github.ohnokogikawaii.client;
 
+import com.github.ohnokogikawaii.wire.JumperWireGeometry;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import com.github.ohnokogikawaii.wire.WireType;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -87,10 +88,14 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
         if (entity.isJumperWire()) {
 
             /*
-             * テスト段階では弛みを付けず、
-             * 2点間を最短距離の直線で接続する。
+             * 制御点を通る曲線を生成する。
+             * 曲線生成クラスはワールド座標を返すため、
+             * 描画用にエンティティ原点からの相対座標へ変換する。
              */
-            centers = List.of(a, b);
+            centers = JumperWireGeometry.getPath(entity)
+                    .stream()
+                    .map(point -> point.subtract(origin))
+                    .toList();
 
         } else {
 

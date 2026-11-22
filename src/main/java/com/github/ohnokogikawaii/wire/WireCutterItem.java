@@ -384,10 +384,7 @@ public class WireCutterItem extends Item {
 
         // ジャンパ線は描画と同じ高さの直線。
         if (wire.isJumperWire()) {
-            return List.of(
-                    a.add(0.0, 0.5, 0.0),
-                    b.add(0.0, 0.5, 0.0)
-            );
+            return JumperWireGeometry.getPath(wire);
         }
 
         WireType wireType = wire.getWireType();
