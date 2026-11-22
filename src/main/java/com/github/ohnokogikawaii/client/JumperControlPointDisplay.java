@@ -7,9 +7,9 @@ import com.github.ohnokogikawaii.wire.WireEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -48,7 +48,6 @@ public final class JumperControlPointDisplay {
             return;
         }
 
-        // 編集機をメインハンドまたはオフハンドに持っているか
         boolean holdingEditor =
                 player.getMainHandItem().is(
                         ModItems.JUMPER_WIRE_EDITOR.get()
@@ -67,14 +66,12 @@ public final class JumperControlPointDisplay {
             return;
         }
 
-        // 照準が合っている制御点を取得
         JumperControlPointPlacement.ControlPointAimTarget aimTarget =
                 JumperControlPointPlacement.findAimTarget(
                         minecraft.level,
                         player
                 );
 
-        // 周囲のジャンパ線を取得
         List<WireEntity> wires =
                 minecraft.level.getEntitiesOfClass(
                         WireEntity.class,
@@ -88,15 +85,6 @@ public final class JumperControlPointDisplay {
 
         Vec3 cameraPosition = event.getCamera().getPosition();
 
-        poseStack.pushPose();
-
-        // カメラ位置を基準に描画
-        poseStack.translate(
-                -cameraPosition.x,
-                -cameraPosition.y,
-                -cameraPosition.z
-        );
-
         var bufferSource =
                 minecraft.renderBuffers().bufferSource();
 
@@ -104,13 +92,20 @@ public final class JumperControlPointDisplay {
         // 制御点の箱を描画
         // ==========================================
 
+        poseStack.pushPose();
+
+        poseStack.translate(
+                -cameraPosition.x,
+                -cameraPosition.y,
+                -cameraPosition.z
+        );
+
         for (WireEntity wire : wires) {
 
             List<Vec3> points = wire.getJumperControlPoints();
 
             for (int i = 0; i < points.size(); i++) {
 
-                // 移動中の制御点は元の位置に描画しない
                 if (JumperControlPointPlacement.isEditing(wire, i)) {
                     continue;
                 }
@@ -130,7 +125,6 @@ public final class JumperControlPointDisplay {
                         position.z + BOX_HALF_SIZE
                 );
 
-                // 現在照準が合っている箱か
                 boolean highlighted =
                         aimTarget != null
                                 && aimTarget.wire() == wire
@@ -141,7 +135,6 @@ public final class JumperControlPointDisplay {
 
                 if (highlighted) {
 
-                    // 選択中の箱は黄色
                     LevelRenderer.renderLineBox(
                             poseStack,
                             consumer,
@@ -154,7 +147,6 @@ public final class JumperControlPointDisplay {
 
                 } else {
 
-                    // 通常の箱は水色
                     LevelRenderer.renderLineBox(
                             poseStack,
                             consumer,
@@ -168,58 +160,88 @@ public final class JumperControlPointDisplay {
             }
         }
 
-        // 箱の描画を先に確定
         bufferSource.endBatch(RenderType.lines());
+        poseStack.popPose();
 
         // ==========================================
-        // 選択中の制御点番号を描画
+        // すべての制御点番号を描画
         // ==========================================
 
-        if (aimTarget != null) {
+        Font font = minecraft.font;
 
-            WireEntity aimedWire = aimTarget.wire();
-            int aimedIndex = aimTarget.index();
+        for (WireEntity wire : wires) {
 
+            if (!wire.isAlive()) {
+                continue;
+            }
+
+            List<Vec3> points = wire.getJumperControlPoints();
             List<Integer> pointIds =
-                    aimedWire.getJumperControlPointIds();
+                    wire.getJumperControlPointIds();
 
-            if (aimedWire.isAlive()
-                    && aimedIndex >= 0
-                    && aimedIndex < pointIds.size()
-                    && !JumperControlPointPlacement.isEditing(
-                    aimedWire,
-                    aimedIndex
-            )) {
+            int count = Math.min(points.size(), pointIds.size());
 
-                Vec3 position = aimTarget.position();
+            for (int i = 0; i < count; i++) {
+
+                if (JumperControlPointPlacement.isEditing(wire, i)) {
+                    continue;
+                }
+
+                Vec3 position = points.get(i).add(
+                        0.0,
+                        0.5,
+                        0.0
+                );
 
                 String number =
-                        String.valueOf(pointIds.get(aimedIndex));
+                        String.valueOf(pointIds.get(i));
 
-                /*
-                 * DebugRendererはPoseStackにカメラ移動が
-                 * 適用されている状態で使用する。
-                 * そのため座標はワールド座標を渡す。
-                 */
-                DebugRenderer.renderFloatingText(
-                        poseStack,
-                        bufferSource,
-                        number,
-                        position.x,
-                        position.y + 0.30,
-                        position.z,
-                        0xFFFFFF,
-                        0.05F,
-                        true,
-                        0.0F,
-                        true
+                // 箱の中心から少し上に配置
+                Vec3 textPosition = new Vec3(
+                        position.x - cameraPosition.x,
+                        position.y + 0.30 - cameraPosition.y,
+                        position.z - cameraPosition.z
                 );
+
+                poseStack.pushPose();
+
+                poseStack.translate(
+                        textPosition.x,
+                        textPosition.y,
+                        textPosition.z
+                );
+
+                // カメラに正面を向ける
+                poseStack.mulPose(
+                        event.getCamera().rotation()
+                );
+
+                poseStack.scale(
+                        -0.025F,
+                        -0.025F,
+                        0.025F
+                );
+
+                float textWidth = font.width(number);
+
+                font.drawInBatch(
+                        number,
+                        -textWidth / 2.0F,
+                        0.0F,
+                        0xFFFFFFFF,
+                        true,
+                        poseStack.last().pose(),
+                        bufferSource,
+                        Font.DisplayMode.SEE_THROUGH,
+                        0x00000000,
+                        15728880
+                );
+
+                poseStack.popPose();
             }
         }
 
-        // 番号の描画を確定
+        // すべての番号を描画確定
         bufferSource.endBatch();
-
-        poseStack.popPose();
     }
 }
