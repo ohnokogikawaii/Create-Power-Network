@@ -7,7 +7,7 @@ import com.github.ohnokogikawaii.wire.WireEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.DebugRenderer;
+import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.entity.player.Player;
@@ -90,8 +90,6 @@ public final class JumperControlPointDisplay {
         var bufferSource =
                 minecraft.renderBuffers().bufferSource();
 
-        VertexConsumer consumer =
-                bufferSource.getBuffer(RenderType.lines());
 
         for (WireEntity wire : wires) {
 
@@ -116,11 +114,13 @@ public final class JumperControlPointDisplay {
                 );
 
                 // 制御点の箱
+                VertexConsumer consumer = bufferSource.getBuffer(RenderType.lines());
+
                 LevelRenderer.renderLineBox(
                         poseStack,
                         consumer,
                         box,
-                        0.1F,
+                        0.2F,
                         0.8F,
                         1.0F,
                         1.0F
