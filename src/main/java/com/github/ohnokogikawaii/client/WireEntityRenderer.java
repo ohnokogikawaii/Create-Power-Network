@@ -323,6 +323,12 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
      * 溝の方向に対して垂直な面にループを作り、
      * 電線と碍子の頭部を一緒に囲む。
      */
+    /**
+     * 碍子の溝に置かれた電線を黒色の固定用ワイヤーで固定する。
+     *
+     * 上面から見てX字になる2本のワイヤーと、
+     * 溝の一段下を水平に一周するワイヤーを描画する。
+     */
     private static void renderSupportTie(
             VertexConsumer buffer,
             PoseStack.Pose pose,
@@ -347,31 +353,71 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                 grooveDirection.x
         ).normalize();
 
-        // 碍子の頭部を囲むループの中心
-        Vec3 loopCenter = wireCenter.add(
-                0.0,
-                -0.075,
-                0.0
+        // 固定用ワイヤーの太さ
+        double tieRadius = Math.max(
+                0.0025,
+                wireRadius * 0.13
         );
 
-        // ループの寸法
-        double horizontalRadius = Math.max(
-                0.075,
-                wireRadius * 3.0
-        );
-
-        double verticalRadius = Math.max(
-                0.10,
+        // X字の大きさ
+        double xRadius = Math.max(
+                0.105,
                 wireRadius * 4.0
         );
 
-        // 固定用線の太さ
-        double tieRadius = Math.max(
-                0.0035,
-                wireRadius * 0.18
+        /*
+         * X字を構成する2本の対角線。
+         *
+         * どちらも溝の中央で交差する。
+         * 上面から見るとX字になる。
+         */
+        Vec3 diagonalA = grooveDirection
+                .add(sideDirection)
+                .normalize();
+
+        Vec3 diagonalB = grooveDirection
+                .subtract(sideDirection)
+                .normalize();
+
+        Vec3 xCenter = wireCenter.add(
+                0.0,
+                0.006,
+                0.0
         );
 
-        final int segments = 16;
+        renderCylinderColored(
+                buffer,
+                pose,
+                xCenter,
+                diagonalA,
+                tieRadius,
+                xRadius * 2.0,
+                packedLight,
+                12, 12, 12
+        );
+
+        renderCylinderColored(
+                buffer,
+                pose,
+                xCenter,
+                diagonalB,
+                tieRadius,
+                xRadius * 2.0,
+                packedLight,
+                12, 12, 12
+        );
+
+        /*
+         * 溝の一段下に巻き付ける水平リング。
+         */
+        double ringRadius = Math.max(
+                0.095,
+                wireRadius * 4.0
+        );
+
+        double ringY = wireCenter.y - 0.075;
+
+        final int segments = 32;
 
         Vec3 previous = null;
 
@@ -379,36 +425,116 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
             double angle =
                     Math.PI * 2.0 * i / segments;
 
-            Vec3 current = loopCenter
-                    .add(
-                            sideDirection.scale(
-                                    Math.cos(angle) * horizontalRadius
-                            )
-                    )
-                    .add(
-                            0.0,
-                            Math.sin(angle) * verticalRadius,
-                            0.0
-                    );
+            Vec3 current = new Vec3(
+                    wireCenter.x + Math.cos(angle) * ringRadius,
+                    ringY,
+                    wireCenter.z + Math.sin(angle) * ringRadius
+            );
 
             if (previous != null) {
                 Vec3 difference = current.subtract(previous);
                 double length = difference.length();
 
                 if (length > 1.0E-6) {
-                    renderCylinder(
+                    renderCylinderColored(
                             buffer,
                             pose,
                             previous.add(current).scale(0.5),
                             difference.normalize(),
                             tieRadius,
                             length,
-                            packedLight
+                            packedLight,
+                            12, 12, 12
                     );
                 }
             }
 
             previous = current;
+        }
+    }
+
+    /**
+     * 色を指定できる円筒形状を描画する。
+     */
+    private static void renderCylinderColored(
+            VertexConsumer buffer,
+            PoseStack.Pose pose,
+            Vec3 center,
+            Vec3 axis,
+            double radius,
+            double length,
+            int packedLight,
+            int red,
+            int green,
+            int blue
+    ) {
+        Vec3 reference = Math.abs(axis.y) < 0.95
+                ? new Vec3(0, 1, 0)
+                : new Vec3(1, 0, 0);
+
+        Vec3 side = axis.cross(reference).normalize();
+        Vec3 up = axis.cross(side).normalize();
+
+        Vec3 start = center.subtract(
+                axis.scale(length * 0.5)
+        );
+
+        Vec3 end = center.add(
+                axis.scale(length * 0.5)
+        );
+
+        for (int i = 0; i < RADIAL_SEGMENTS; i++) {
+            double angle0 =
+                    2.0 * Math.PI * i / RADIAL_SEGMENTS;
+
+            double angle1 =
+                    2.0 * Math.PI * (i + 1) / RADIAL_SEGMENTS;
+
+            Vec3 normal0 = ringNormal(side, up, angle0);
+            Vec3 normal1 = ringNormal(side, up, angle1);
+
+            Vec3 start0 = start.add(
+                    normal0.scale(radius)
+            );
+
+            Vec3 start1 = start.add(
+                    normal1.scale(radius)
+            );
+
+            Vec3 end0 = end.add(
+                    normal0.scale(radius)
+            );
+
+            Vec3 end1 = end.add(
+                    normal1.scale(radius)
+            );
+
+            float u0 = (float) i / RADIAL_SEGMENTS;
+            float u1 = (float) (i + 1) / RADIAL_SEGMENTS;
+
+            addVertexColored(
+                    buffer, pose, start0, normal0,
+                    u0, 1.0F, packedLight,
+                    red, green, blue
+            );
+
+            addVertexColored(
+                    buffer, pose, start1, normal1,
+                    u1, 1.0F, packedLight,
+                    red, green, blue
+            );
+
+            addVertexColored(
+                    buffer, pose, end1, normal1,
+                    u1, 0.0F, packedLight,
+                    red, green, blue
+            );
+
+            addVertexColored(
+                    buffer, pose, end0, normal0,
+                    u0, 0.0F, packedLight,
+                    red, green, blue
+            );
         }
     }
 
@@ -448,6 +574,10 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
         double length;
         double radiusMultiplier;
         double minimumRadius;
+        // 低圧用碍子の端末金具は描画しない
+        if (type == InsulatorBlock.Type.LOW_VOLTAGE) {
+            return;
+        }
 
         switch (type) {
             case LOW_VOLTAGE -> {
@@ -841,6 +971,39 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                         (float) position.z
                 )
                 .setColor(255, 255, 255, 255)
+                .setUv(u, v)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setLight(packedLight)
+                .setNormal(
+                        pose,
+                        (float) normal.x,
+                        (float) normal.y,
+                        (float) normal.z
+                );
+    }
+
+    /**
+     * 頂点の色を指定して描画する。
+     */
+    private static void addVertexColored(
+            VertexConsumer buffer,
+            PoseStack.Pose pose,
+            Vec3 position,
+            Vec3 normal,
+            float u,
+            float v,
+            int packedLight,
+            int red,
+            int green,
+            int blue
+    ) {
+        buffer.addVertex(
+                        pose,
+                        (float) position.x,
+                        (float) position.y,
+                        (float) position.z
+                )
+                .setColor(red, green, blue, 255)
                 .setUv(u, v)
                 .setOverlay(OverlayTexture.NO_OVERLAY)
                 .setLight(packedLight)
