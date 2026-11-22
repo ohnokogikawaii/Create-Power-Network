@@ -1,6 +1,10 @@
+
 {
   "variants": {
-    "": {
+    "open=false": {
+      "model": "powernetwork:block/pas_operating_rope"
+    },
+    "open=true": {
       "model": "powernetwork:block/pas_operating_rope"
     }
   }

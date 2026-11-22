@@ -265,7 +265,7 @@ public class SOGBlockEntity extends BlockEntity {
 
         // 直接接続の場合
         if (controlMode == ControlMode.DIRECT) {
-            pas.setOpen(true);
+            pas.setClosed(false);
             refreshControlSignals();
             return pas.isOpen();
         }

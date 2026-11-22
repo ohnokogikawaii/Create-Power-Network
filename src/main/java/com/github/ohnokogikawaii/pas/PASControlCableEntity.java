@@ -172,7 +172,7 @@ public class PASControlCableEntity extends Entity {
             return false;
         }
 
-        pas.setOpen(true);
+        pas.setClosed(false);
 
         return pas.isOpen();
     }
