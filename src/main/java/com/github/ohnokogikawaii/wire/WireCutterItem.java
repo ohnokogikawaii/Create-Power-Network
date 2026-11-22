@@ -22,13 +22,24 @@ import java.util.UUID;
 public class WireCutterItem extends Item {
 
     private static final double REACH = 3.0;
-    private static final double MAX_HIT_DISTANCE = 0.30;
-    private static final int TRACE_SAMPLES = 3;
+    private static final double MAX_HIT_DISTANCE = 0.45;
+
+    private static final double AIM_REACH = 6.0;
+    private static final double AIM_DISTANCE = 0.80;
+    private static final double TRACE_INTERVAL = 0.125;
 
     private record WireHit(
             WireEntity wire,
             double distanceAlongRay,
             double distanceToRay
+    ) {
+    }
+
+    public record WireAimTarget(
+            WireEntity wire,
+            double distanceAlongRay,
+            double distanceToRay,
+            boolean canCut
     ) {
     }
 
@@ -203,50 +214,51 @@ public class WireCutterItem extends Item {
             Level level,
             Player player
     ) {
+        WireAimTarget target = findAimTarget(level, player);
+
+        if (target == null || !target.canCut()) {
+            return null;
+        }
+
+        return new WireHit(
+                target.wire(),
+                target.distanceAlongRay(),
+                target.distanceToRay()
+        );
+    }
+
+    /**
+     * ワイヤーカッターの照準対象を取得する。
+     *
+     * 6ブロック以内にある配線を探し、
+     * 3ブロック以内かつ判定幅以内なら切断可能とする。
+     */
+    public static WireAimTarget findAimTarget(
+            Level level,
+            Player player
+    ) {
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getViewVector(1.0F).normalize();
-        Vec3 rayEnd = eye.add(look.scale(REACH));
 
-        /*
-         * 長いワイヤーの Entity 自体が視線から離れていても
-         * 候補として取得できるようにする。
-         *
-         * 実際に切断する距離は REACH で制限する。
-         */
+        Vec3 rayEnd = eye.add(look.scale(AIM_REACH));
+
         AABB searchArea = new AABB(eye, rayEnd).inflate(64.0);
 
-        WireHit bestHit = null;
+        WireAimTarget bestTarget = null;
 
         for (WireEntity wire : level.getEntitiesOfClass(
                 WireEntity.class,
                 searchArea,
                 Entity::isAlive
         )) {
-            Vec3 a = wire.getEndpointAWorldPosition();
-            Vec3 b = wire.getEndpointBWorldPosition();
+            List<Vec3> path = getAimPath(wire);
 
-            if (a.distanceToSqr(b) < 1.0E-8) {
-                continue;
-            }
-
-            WireType wireType = wire.getWireType();
-            boolean canSag = wireType != null
-                    && wireType.canSag();
-
-            for (int i = 0; i <= TRACE_SAMPLES; i++) {
-                double t = (double) i / TRACE_SAMPLES;
-
-                Vec3 point = WireBranchGeometry.pointOnWire(
-                        a,
-                        b,
-                        t,
-                        canSag
-                );
-
+            for (Vec3 point : path) {
                 Vec3 fromEye = point.subtract(eye);
+
                 double alongRay = fromEye.dot(look);
 
-                if (alongRay < 0.0 || alongRay > REACH) {
+                if (alongRay < 0.0 || alongRay > AIM_REACH) {
                     continue;
                 }
 
@@ -256,27 +268,127 @@ public class WireCutterItem extends Item {
 
                 double distance = point.distanceTo(closestOnRay);
 
-                if (distance > MAX_HIT_DISTANCE) {
+                if (distance > AIM_DISTANCE) {
                     continue;
                 }
 
-                if (bestHit == null
-                        || alongRay < bestHit.distanceAlongRay()
-                        || (Math.abs(
-                        alongRay - bestHit.distanceAlongRay()
-                ) < 1.0E-6
-                        && distance < bestHit.distanceToRay())) {
+                boolean canCut =
+                        alongRay <= REACH
+                                && distance <= MAX_HIT_DISTANCE;
 
-                    bestHit = new WireHit(
+                if (bestTarget == null
+                        || alongRay < bestTarget.distanceAlongRay()
+                        || (Math.abs(
+                        alongRay - bestTarget.distanceAlongRay()
+                ) < 1.0E-6
+                        && distance < bestTarget.distanceToRay())) {
+
+                    bestTarget = new WireAimTarget(
                             wire,
                             alongRay,
-                            distance
+                            distance,
+                            canCut
                     );
                 }
             }
         }
 
-        return bestHit;
+        return bestTarget;
+    }
+
+    /**
+     * 描画位置と合わせた配線の経路を取得する。
+     *
+     * ジャンパ線は両端を0.5ブロック上げた直線。
+     * 通常の電線は既存の垂れ計算を使用する。
+     */
+    public static List<Vec3> getAimPath(WireEntity wire) {
+        Vec3 a = wire.getEndpointAWorldPosition();
+        Vec3 b = wire.getEndpointBWorldPosition();
+
+        // ジャンパ線は描画と同じ高さの直線。
+        if (wire.isJumperWire()) {
+            return List.of(
+                    a.add(0.0, 0.5, 0.0),
+                    b.add(0.0, 0.5, 0.0)
+            );
+        }
+
+        WireType wireType = wire.getWireType();
+
+        boolean canSag = wireType != null
+                && wireType.canSag();
+
+        double totalLength = a.distanceTo(b);
+
+        if (totalLength < 1.0E-8) {
+            return List.of(a, b);
+        }
+
+        record PathAnchor(double t, Vec3 position) {
+        }
+
+        Vec3 direction = b.subtract(a);
+        double lengthSquared = direction.lengthSqr();
+
+        List<PathAnchor> anchors = new ArrayList<>();
+
+        anchors.add(new PathAnchor(0.0, a));
+
+        // 中間支持点を始点から終点への順番に並べる。
+        for (WireEntity.SupportPoint support : wire.getSupportPoints()) {
+            Vec3 position = support.position();
+
+            double t = position.subtract(a)
+                    .dot(direction) / lengthSquared;
+
+            if (t > 0.0 && t < 1.0) {
+                anchors.add(new PathAnchor(t, position));
+            }
+        }
+
+        anchors.add(new PathAnchor(1.0, b));
+
+        anchors.sort(
+                java.util.Comparator.comparingDouble(PathAnchor::t)
+        );
+
+        List<Vec3> result = new ArrayList<>();
+
+        // 支持点間を個別にサンプリングする。
+        for (int spanIndex = 0; spanIndex < anchors.size() - 1; spanIndex++) {
+            Vec3 start = anchors.get(spanIndex).position();
+            Vec3 end = anchors.get(spanIndex + 1).position();
+
+            double spanLength = start.distanceTo(end);
+
+            int samples = Math.max(
+                    2,
+                    Math.min(
+                            1024,
+                            (int) Math.ceil(spanLength / TRACE_INTERVAL)
+                    )
+            );
+
+            for (int i = 0; i <= samples; i++) {
+                if (spanIndex > 0 && i == 0) {
+                    continue;
+                }
+
+                double t = (double) i / samples;
+
+                result.add(
+                        WireBranchGeometry.pointOnWire(
+                                start,
+                                end,
+                                t,
+                                canSag
+                        )
+                );
+            }
+        }
+
+        return result;
     }
 
     /**
