@@ -28,7 +28,7 @@ import java.util.List;
 )
 public final class JumperControlPointDisplay {
 
-    private static final double DISPLAY_RANGE = 32.0;
+    private static final double DISPLAY_RANGE = 16.0;
     private static final double BOX_HALF_SIZE = 0.11;
 
     private JumperControlPointDisplay() {
@@ -218,7 +218,6 @@ public final class JumperControlPointDisplay {
             StringBuilder line = new StringBuilder();
 
             line.append("ジャンパ線 ")
-                    .append(wire.getId())
                     .append(" : 始点");
 
             int displayedNumber = 0;
