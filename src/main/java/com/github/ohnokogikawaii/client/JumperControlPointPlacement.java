@@ -10,6 +10,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
@@ -19,6 +20,8 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.lwjgl.glfw.GLFW;
+
+import java.util.List;
 
 @EventBusSubscriber(
         modid = PowerNetwork.MODID,
@@ -39,6 +42,8 @@ public final class JumperControlPointPlacement {
     private static long firstClickTime = -1L;
 
     private static int editingIndex = -1;
+
+    private static boolean ignoreNextRightPress = false;
 
     private static final long DOUBLE_CLICK_INTERVAL = 350L;
 
@@ -98,19 +103,25 @@ public final class JumperControlPointPlacement {
      *
      * indexは0始まり。
      */
+    /**
+     * 既存の制御点を指定して移動モードを開始する。
+     *
+     * indexは0始まり。
+     */
     public static boolean startEditing(
             WireEntity wire,
             int index
     ) {
         Minecraft minecraft = Minecraft.getInstance();
 
-        if (wire == null
+        if (minecraft.player == null
+                || wire == null
                 || wire.isRemoved()
                 || !wire.isJumperWire()) {
             return false;
         }
 
-        var points = wire.getJumperControlPoints();
+        List<Vec3> points = wire.getJumperControlPoints();
 
         if (index < 0 || index >= points.size()) {
             return false;
@@ -119,7 +130,7 @@ public final class JumperControlPointPlacement {
         targetWire = wire;
         editingIndex = index;
 
-        // 保存座標を描画座標へ変換。
+        // 保存座標を箱の描画座標へ変換する。
         previewPosition = points.get(index).add(
                 0.0,
                 0.5,
@@ -129,11 +140,11 @@ public final class JumperControlPointPlacement {
         active = true;
         moving = false;
 
-        previousPlayerPosition = minecraft.player == null
-                ? null
-                : minecraft.player.position();
-
+        previousPlayerPosition = minecraft.player.position();
         firstClickTime = -1L;
+
+        // 箱を選択した右クリックを移動開始に使わない。
+        ignoreNextRightPress = true;
 
         return true;
     }
@@ -145,6 +156,7 @@ public final class JumperControlPointPlacement {
         active = false;
         moving = false;
         editingIndex = -1;
+        ignoreNextRightPress = false;
 
         targetWire = null;
         previousPlayerPosition = null;
@@ -183,6 +195,13 @@ public final class JumperControlPointPlacement {
             event.setCanceled(true);
 
             if (event.getAction() == GLFW.GLFW_PRESS) {
+
+                // 箱を選択した直後の右クリックは無視する。
+                if (ignoreNextRightPress) {
+                    ignoreNextRightPress = false;
+                    return;
+                }
+
                 Player player = minecraft.player;
 
                 if (player == null) {
@@ -251,6 +270,11 @@ public final class JumperControlPointPlacement {
     public static void onClientTick(ClientTickEvent.Post event) {
         if (!active) {
             return;
+        }
+        // 箱を選択した右クリックが配置側で処理されなかった場合、
+// 次のTickでフラグを解除する。
+        if (ignoreNextRightPress) {
+            ignoreNextRightPress = false;
         }
 
         Minecraft minecraft = Minecraft.getInstance();
@@ -537,13 +561,15 @@ public final class JumperControlPointPlacement {
                         0.0
                 );
 
+                double halfSize = 0.11;
+
                 AABB box = new AABB(
-                        position.x - BOX_HALF_SIZE,
-                        position.y - BOX_HALF_SIZE,
-                        position.z - BOX_HALF_SIZE,
-                        position.x + BOX_HALF_SIZE,
-                        position.y + BOX_HALF_SIZE,
-                        position.z + BOX_HALF_SIZE
+                        position.x - halfSize,
+                        position.y - halfSize,
+                        position.z - halfSize,
+                        position.x + halfSize,
+                        position.y + halfSize,
+                        position.z + halfSize
                 );
 
                 var hit = box.clip(eye, rayEnd);

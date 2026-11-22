@@ -1,3 +1,4 @@
+
 package com.github.ohnokogikawaii.client;
 
 import com.github.ohnokogikawaii.PowerNetwork;
@@ -38,7 +39,7 @@ public final class JumperWireEditorInput {
             return;
         }
 
-        // 制御点配置中は右クリックを配置操作に使用する。
+        // 制御点の配置・移動中は既存の操作を優先する。
         if (JumperControlPointPlacement.isActive()) {
             return;
         }
@@ -57,6 +58,33 @@ public final class JumperWireEditorInput {
             return;
         }
 
+        /*
+         * 最優先：中継点の箱を検索する。
+         */
+        JumperControlPointPlacement.ControlPointAimTarget pointTarget =
+                JumperControlPointPlacement.findAimTarget(
+                        minecraft.level,
+                        player
+                );
+
+        if (pointTarget != null) {
+
+            boolean started =
+                    JumperControlPointPlacement.startEditing(
+                            pointTarget.wire(),
+                            pointTarget.index()
+                    );
+
+            if (started) {
+                event.setCanceled(true);
+            }
+
+            return;
+        }
+
+        /*
+         * 次に配線を検索する。
+         */
         WireCutterItem.WireAimTarget target =
                 WireCutterItem.findJumperAimTarget(
                         minecraft.level,

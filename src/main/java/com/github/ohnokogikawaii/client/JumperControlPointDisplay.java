@@ -97,6 +97,11 @@ public final class JumperControlPointDisplay {
 
             for (int i = 0; i < points.size(); i++) {
 
+                // 現在移動中の制御点は元の場所に描画しない。
+                if (JumperControlPointPlacement.isEditing(wire, i)) {
+                    continue;
+                }
+
                 // Geometryと同じ描画座標に合わせる。
                 Vec3 position = points.get(i).add(
                         0.0,
