@@ -149,6 +149,18 @@ public class WireEntity extends Entity {
             );
 
     /**
+     * ジャンパ線専用の制御点。
+     * 通常の碍子支持点とは別に管理する。
+     */
+    private static final int MAX_JUMPER_CONTROL_POINTS = 16;
+
+    private static final EntityDataAccessor<String> JUMPER_CONTROL_POINTS =
+            SynchedEntityData.defineId(
+                    WireEntity.class,
+                    EntityDataSerializers.STRING
+            );
+
+    /**
      * A/B端点が碍子上の端末処理になっているか。
      */
     private static final EntityDataAccessor<Boolean> TERMINAL_A =
@@ -258,6 +270,7 @@ public class WireEntity extends Entity {
         builder.define(BRANCH_A_ID, -1);
         builder.define(BRANCH_B_ID, -1);
         builder.define(SUPPORT_POINTS, "");
+        builder.define(JUMPER_CONTROL_POINTS, "");
         builder.define(TERMINAL_A, false);
         builder.define(TERMINAL_B, false);
 
@@ -475,6 +488,180 @@ public class WireEntity extends Entity {
     public UUID getBranchBUuid() {
         return branchBUuid;
     }
+
+    /**
+     * ジャンパ線の制御点一覧を取得する。
+     */
+    public List<Vec3> getJumperControlPoints() {
+        if (!isJumperWire()) {
+            return Collections.emptyList();
+        }
+
+        String serialized = entityData.get(JUMPER_CONTROL_POINTS);
+
+        if (serialized.isBlank()) {
+            return Collections.emptyList();
+        }
+
+        List<Vec3> result = new ArrayList<>();
+
+        for (String entry : serialized.split(";")) {
+            try {
+                String[] values = entry.split(",");
+
+                if (values.length != 3) {
+                    continue;
+                }
+
+                double x = Double.parseDouble(values[0]);
+                double y = Double.parseDouble(values[1]);
+                double z = Double.parseDouble(values[2]);
+
+                if (!Double.isFinite(x)
+                        || !Double.isFinite(y)
+                        || !Double.isFinite(z)) {
+                    continue;
+                }
+
+                result.add(new Vec3(x, y, z));
+
+                if (result.size() >= MAX_JUMPER_CONTROL_POINTS) {
+                    break;
+                }
+
+            } catch (NumberFormatException ignored) {
+                // 不正な同期データは読み飛ばす。
+            }
+        }
+
+        return Collections.unmodifiableList(result);
+    }
+
+    /**
+     * ジャンパ線の制御点一覧を設定する。
+     */
+    public boolean setJumperControlPoints(List<Vec3> points) {
+        if (!isJumperWire() || points == null) {
+            return false;
+        }
+
+        List<Vec3> validPoints = new ArrayList<>();
+
+        for (Vec3 point : points) {
+            if (point == null
+                    || !Double.isFinite(point.x)
+                    || !Double.isFinite(point.y)
+                    || !Double.isFinite(point.z)) {
+                continue;
+            }
+
+            validPoints.add(point);
+
+            if (validPoints.size() >= MAX_JUMPER_CONTROL_POINTS) {
+                break;
+            }
+        }
+
+        syncJumperControlPoints(validPoints);
+        return true;
+    }
+
+    /**
+     * 制御点を追加する。
+     */
+    public boolean addJumperControlPoint(Vec3 position) {
+        if (!isJumperWire()
+                || position == null
+                || !Double.isFinite(position.x)
+                || !Double.isFinite(position.y)
+                || !Double.isFinite(position.z)) {
+            return false;
+        }
+
+        List<Vec3> points =
+                new ArrayList<>(getJumperControlPoints());
+
+        if (points.size() >= MAX_JUMPER_CONTROL_POINTS) {
+            return false;
+        }
+
+        points.add(position);
+        syncJumperControlPoints(points);
+
+        return true;
+    }
+
+    /**
+     * 指定番号の制御点を移動する。
+     */
+    public boolean moveJumperControlPoint(
+            int index,
+            Vec3 position
+    ) {
+        if (!isJumperWire()
+                || position == null
+                || !Double.isFinite(position.x)
+                || !Double.isFinite(position.y)
+                || !Double.isFinite(position.z)) {
+            return false;
+        }
+
+        List<Vec3> points =
+                new ArrayList<>(getJumperControlPoints());
+
+        if (index < 0 || index >= points.size()) {
+            return false;
+        }
+
+        points.set(index, position);
+        syncJumperControlPoints(points);
+
+        return true;
+    }
+
+    /**
+     * 指定番号の制御点を削除する。
+     */
+    public boolean removeJumperControlPoint(int index) {
+        if (!isJumperWire()) {
+            return false;
+        }
+
+        List<Vec3> points =
+                new ArrayList<>(getJumperControlPoints());
+
+        if (index < 0 || index >= points.size()) {
+            return false;
+        }
+
+        points.remove(index);
+        syncJumperControlPoints(points);
+
+        return true;
+    }
+
+    /**
+     * 制御点一覧を同期データに変換する。
+     */
+    private void syncJumperControlPoints(List<Vec3> points) {
+        StringBuilder builder = new StringBuilder();
+
+        for (Vec3 point : points) {
+            if (!builder.isEmpty()) {
+                builder.append(";");
+            }
+
+            builder.append(point.x).append(",");
+            builder.append(point.y).append(",");
+            builder.append(point.z);
+        }
+
+        entityData.set(
+                JUMPER_CONTROL_POINTS,
+                builder.toString()
+        );
+    }
+
     /**
      * 支持点一覧を取得する。
      */
@@ -791,6 +978,19 @@ public class WireEntity extends Entity {
         }
 
         tag.put("SupportPoints", supportList);
+        ListTag jumperControlList = new ListTag();
+
+        for (Vec3 point : getJumperControlPoints()) {
+            CompoundTag entry = new CompoundTag();
+
+            entry.putDouble("X", point.x);
+            entry.putDouble("Y", point.y);
+            entry.putDouble("Z", point.z);
+
+            jumperControlList.add(entry);
+        }
+
+        tag.put("JumperControlPoints", jumperControlList);
         tag.putBoolean("TerminalA", isTerminalA());
         tag.putBoolean("TerminalB", isTerminalB());
 
@@ -938,6 +1138,38 @@ public class WireEntity extends Entity {
                 tag.getBoolean("JumperWire")
         );
 
+        List<Vec3> jumperControlPoints = new ArrayList<>();
+
+        if (tag.contains("JumperControlPoints", Tag.TAG_LIST)) {
+            ListTag controlList = tag.getList(
+                    "JumperControlPoints",
+                    Tag.TAG_COMPOUND
+            );
+
+            for (int i = 0;
+                 i < controlList.size()
+                         && jumperControlPoints.size()
+                         < MAX_JUMPER_CONTROL_POINTS;
+                 i++) {
+
+                CompoundTag entry = controlList.getCompound(i);
+
+                double x = entry.getDouble("X");
+                double y = entry.getDouble("Y");
+                double z = entry.getDouble("Z");
+
+                if (!Double.isFinite(x)
+                        || !Double.isFinite(y)
+                        || !Double.isFinite(z)) {
+                    continue;
+                }
+
+                jumperControlPoints.add(new Vec3(x, y, z));
+            }
+        }
+
+        syncJumperControlPoints(jumperControlPoints);
+
 
         syncSupportPoints(supportPoints);
 
@@ -967,6 +1199,18 @@ public class WireEntity extends Entity {
             maxX = Math.max(maxX, p.x);
             maxY = Math.max(maxY, p.y);
             maxZ = Math.max(maxZ, p.z);
+        }
+
+        if (isJumperWire()) {
+            for (Vec3 p : getJumperControlPoints()) {
+                minX = Math.min(minX, p.x);
+                minY = Math.min(minY, p.y);
+                minZ = Math.min(minZ, p.z);
+
+                maxX = Math.max(maxX, p.x);
+                maxY = Math.max(maxY, p.y);
+                maxZ = Math.max(maxZ, p.z);
+            }
         }
 
         return new AABB(

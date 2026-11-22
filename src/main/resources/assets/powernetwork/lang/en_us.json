@@ -19,6 +19,7 @@
   "message.powernetwork.wire.too_long": "The wire is too long",
   "message.powernetwork.wire.connected": "Copper wire connected",
   "block.powernetwork.pas_operating_lever": "PAS Operating Lever",
-  "block.powernetwork.pas_operating_rope": "PAS Operating Rope"
+  "block.powernetwork.pas_operating_rope": "PAS Operating Rope",
+  "message.powernetwork.wire.cut": "cut wire succses!"
 }
 
