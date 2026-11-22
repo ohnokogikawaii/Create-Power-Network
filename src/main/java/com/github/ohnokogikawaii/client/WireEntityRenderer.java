@@ -236,6 +236,17 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                 RenderType.entityCutoutNoCull(metalTexture)
         );
 
+        // 固定用ワイヤーは黒色で描画する
+        ResourceLocation tieTexture =
+                ResourceLocation.fromNamespaceAndPath(
+                        "minecraft",
+                        "textures/block/black_concrete.png"
+                );
+
+        VertexConsumer tieBuffer = bufferSource.getBuffer(
+                RenderType.entityCutoutNoCull(tieTexture)
+        );
+
         /*
          * 固定式碍子の溝に載っている電線を、
          * 固定用の細い線で押さえる。
@@ -260,7 +271,7 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                     support.position().subtract(origin);
 
             renderSupportTie(
-                    metalBuffer,
+                    tieBuffer,
                     pose,
                     supportPosition,
                     insulatorEntity.getGrooveYaw(),
@@ -318,16 +329,11 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
     }
 
     /**
-     * 碍子の溝に置かれた電線を固定するための線を描画する。
+     * 碍子の溝に置かれた電線を固定する線を描画する。
      *
-     * 溝の方向に対して垂直な面にループを作り、
-     * 電線と碍子の頭部を一緒に囲む。
-     */
-    /**
-     * 碍子の溝に置かれた電線を黒色の固定用ワイヤーで固定する。
-     *
-     * 上面から見てX字になる2本のワイヤーと、
-     * 溝の一段下を水平に一周するワイヤーを描画する。
+     * 上側：溝の真上で交差するX字
+     * 下側：碍子の頭部を囲む四角い一周巻き
+     * 四隅：X字と下側の巻き線を接続する
      */
     private static void renderSupportTie(
             VertexConsumer buffer,
@@ -346,111 +352,132 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                 Math.sin(radians)
         ).normalize();
 
-        // 溝に対して垂直な水平方向
+        // 溝に対して垂直な方向
         Vec3 sideDirection = new Vec3(
                 -grooveDirection.z,
                 0.0,
                 grooveDirection.x
         ).normalize();
 
-        // 固定用ワイヤーの太さ
+        // 固定線の太さ
         double tieRadius = Math.max(
-                0.0025,
-                wireRadius * 0.13
+                0.0035,
+                wireRadius * 0.18
         );
 
-        // X字の大きさ
-        double xRadius = Math.max(
-                0.105,
-                wireRadius * 4.0
-        );
-
-        /*
-         * X字を構成する2本の対角線。
-         *
-         * どちらも溝の中央で交差する。
-         * 上面から見るとX字になる。
-         */
-        Vec3 diagonalA = grooveDirection
-                .add(sideDirection)
-                .normalize();
-
-        Vec3 diagonalB = grooveDirection
-                .subtract(sideDirection)
-                .normalize();
-
-        Vec3 xCenter = wireCenter.add(
-                0.0,
-                0.006,
-                0.0
-        );
-
-        renderCylinderColored(
-                buffer,
-                pose,
-                xCenter,
-                diagonalA,
-                tieRadius,
-                xRadius * 2.0,
-                packedLight,
-                12, 12, 12
-        );
-
-        renderCylinderColored(
-                buffer,
-                pose,
-                xCenter,
-                diagonalB,
-                tieRadius,
-                xRadius * 2.0,
-                packedLight,
-                12, 12, 12
+        // 下側の四角形の半分の幅
+        // 従来の楕円形より少し大きくする
+        double halfSize = Math.max(
+                0.13,
+                wireRadius * 5.0
         );
 
         /*
-         * 溝の一段下に巻き付ける水平リング。
+         * 四角形の四隅
+         * 碍子の溝の向きに合わせて回転する。
          */
-        double ringRadius = Math.max(
-                0.095,
-                wireRadius * 4.0
-        );
+        Vec3 corner0 = wireCenter
+                .add(grooveDirection.scale(-halfSize))
+                .add(sideDirection.scale(-halfSize));
 
-        double ringY = wireCenter.y - 0.075;
+        Vec3 corner1 = wireCenter
+                .add(grooveDirection.scale(halfSize))
+                .add(sideDirection.scale(-halfSize));
 
-        final int segments = 32;
+        Vec3 corner2 = wireCenter
+                .add(grooveDirection.scale(halfSize))
+                .add(sideDirection.scale(halfSize));
 
-        Vec3 previous = null;
+        Vec3 corner3 = wireCenter
+                .add(grooveDirection.scale(-halfSize))
+                .add(sideDirection.scale(halfSize));
 
-        for (int i = 0; i <= segments; i++) {
-            double angle =
-                    Math.PI * 2.0 * i / segments;
+        /*
+         * 下側の四角い巻き線
+         * 溝から一段下に配置する。
+         */
+        double lowerOffset = -0.045;
 
-            Vec3 current = new Vec3(
-                    wireCenter.x + Math.cos(angle) * ringRadius,
-                    ringY,
-                    wireCenter.z + Math.sin(angle) * ringRadius
-            );
+        Vec3 lower0 = corner0.add(0.0, lowerOffset, 0.0);
+        Vec3 lower1 = corner1.add(0.0, lowerOffset, 0.0);
+        Vec3 lower2 = corner2.add(0.0, lowerOffset, 0.0);
+        Vec3 lower3 = corner3.add(0.0, lowerOffset, 0.0);
 
-            if (previous != null) {
-                Vec3 difference = current.subtract(previous);
-                double length = difference.length();
+        // 四角形に沿って一周させる
+        renderTieLine(buffer, pose, lower0, lower1,
+                tieRadius, packedLight);
 
-                if (length > 1.0E-6) {
-                    renderCylinderColored(
-                            buffer,
-                            pose,
-                            previous.add(current).scale(0.5),
-                            difference.normalize(),
-                            tieRadius,
-                            length,
-                            packedLight,
-                            12, 12, 12
-                    );
-                }
-            }
+        renderTieLine(buffer, pose, lower1, lower2,
+                tieRadius, packedLight);
 
-            previous = current;
+        renderTieLine(buffer, pose, lower2, lower3,
+                tieRadius, packedLight);
+
+        renderTieLine(buffer, pose, lower3, lower0,
+                tieRadius, packedLight);
+
+        /*
+         * 上側のX字
+         * 従来より少し上に配置する。
+         */
+        double upperOffset = 0.025;
+
+        Vec3 upper0 = corner0.add(0.0, upperOffset, 0.0);
+        Vec3 upper1 = corner1.add(0.0, upperOffset, 0.0);
+        Vec3 upper2 = corner2.add(0.0, upperOffset, 0.0);
+        Vec3 upper3 = corner3.add(0.0, upperOffset, 0.0);
+
+        // X字の一本目
+        renderTieLine(buffer, pose, upper0, upper2,
+                tieRadius, packedLight);
+
+        // X字の二本目
+        renderTieLine(buffer, pose, upper1, upper3,
+                tieRadius, packedLight);
+
+        /*
+         * X字の四隅を下側の巻き線に接続する。
+         */
+        renderTieLine(buffer, pose, upper0, lower0,
+                tieRadius, packedLight);
+
+        renderTieLine(buffer, pose, upper1, lower1,
+                tieRadius, packedLight);
+
+        renderTieLine(buffer, pose, upper2, lower2,
+                tieRadius, packedLight);
+
+        renderTieLine(buffer, pose, upper3, lower3,
+                tieRadius, packedLight);
+    }
+
+    /**
+     * 2点間に固定用の線を描画する。
+     */
+    private static void renderTieLine(
+            VertexConsumer buffer,
+            PoseStack.Pose pose,
+            Vec3 start,
+            Vec3 end,
+            double radius,
+            int packedLight
+    ) {
+        Vec3 difference = end.subtract(start);
+        double length = difference.length();
+
+        if (length < 1.0E-6) {
+            return;
         }
+
+        renderCylinder(
+                buffer,
+                pose,
+                start.add(end).scale(0.5),
+                difference.normalize(),
+                radius,
+                length,
+                packedLight
+        );
     }
 
     /**
