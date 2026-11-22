@@ -294,8 +294,6 @@ public final class JumperControlPointPlacement {
         var bufferSource =
                 minecraft.renderBuffers().bufferSource();
 
-        VertexConsumer consumer =
-                bufferSource.getBuffer(RenderType.lines());
 
         PoseStack.Pose pose = poseStack.last();
 
@@ -387,6 +385,13 @@ public final class JumperControlPointPlacement {
             }
         }
 
+        // ジャンパ線の四角形描画を先に確定する
+        bufferSource.endBatch(RenderType.debugQuads());
+
+        // 箱の描画用バッファを改めて取得する
+        VertexConsumer consumer =
+                bufferSource.getBuffer(RenderType.lines());
+
         /*
          * 制御点のプレビュー箱を描画する。
          */
@@ -420,7 +425,6 @@ public final class JumperControlPointPlacement {
         /*
          * 線と箱の描画をまとめて確定する。
          */
-        bufferSource.endBatch(RenderType.debugQuads());
         bufferSource.endBatch(RenderType.lines());
     }
 
