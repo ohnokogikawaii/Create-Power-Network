@@ -274,7 +274,7 @@ public class InsulatorBlock extends BaseEntityBlock
     @Override
     public RenderShape getRenderShape(BlockState state) {
         return type == Type.LOW_VOLTAGE
-                ? RenderShape.INVISIBLE
+                ? RenderShape.ENTITYBLOCK_ANIMATED
                 : RenderShape.MODEL;
     }
 
