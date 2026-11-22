@@ -45,8 +45,9 @@ public class JumperWireEditorScreen extends Screen {
             int columnX = centerX - 150 + column * 155;
             int rowY = ROW_TOP + row * ROW_HEIGHT;
 
+            // 始点方向へ移動
             Button upButton = Button.builder(
-                    Component.literal("↑"),
+                    Component.literal("↑始"),
                     button -> {
                         JumperControlPointNetwork.requestReorderControlPoint(
                                 wire.getId(),
@@ -55,17 +56,18 @@ public class JumperWireEditorScreen extends Screen {
                         );
                     }
             ).bounds(
-                    columnX + 88,
+                    columnX + 86,
                     rowY,
-                    22,
+                    32,
                     18
             ).build();
 
             upButton.active = index > 0;
             addRenderableWidget(upButton);
 
+            // 終点方向へ移動
             Button downButton = Button.builder(
-                    Component.literal("↓"),
+                    Component.literal("↓終"),
                     button -> {
                         JumperControlPointNetwork.requestReorderControlPoint(
                                 wire.getId(),
@@ -74,9 +76,9 @@ public class JumperWireEditorScreen extends Screen {
                         );
                     }
             ).bounds(
-                    columnX + 113,
+                    columnX + 120,
                     rowY,
-                    22,
+                    32,
                     18
             ).build();
 
@@ -115,10 +117,6 @@ public class JumperWireEditorScreen extends Screen {
         );
     }
 
-    /**
-     * サーバーから制御点の順番変更が同期されたら、
-     * ボタンと番号を再構築する。
-     */
     @Override
     public void tick() {
         super.tick();
