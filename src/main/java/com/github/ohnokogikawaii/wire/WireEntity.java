@@ -164,6 +164,15 @@ public class WireEntity extends Entity {
             );
 
     /**
+     * ジャンパ線かどうか。
+     */
+    private static final EntityDataAccessor<Boolean> JUMPER_WIRE =
+            SynchedEntityData.defineId(
+                    WireEntity.class,
+                    EntityDataSerializers.BOOLEAN
+            );
+
+    /**
      * 端末から再接続できる状態か。
      * 現段階では端末の保存・同期に使用し、再接続処理は次段階で実装する。
      */
@@ -254,6 +263,8 @@ public class WireEntity extends Entity {
 
         builder.define(RECONNECTABLE_A, false);
         builder.define(RECONNECTABLE_B, false);
+
+        builder.define(JUMPER_WIRE, false);
     }
 
     public BlockPos getEndpointA() {
@@ -332,6 +343,14 @@ public class WireEntity extends Entity {
                 entityData.get(ENDPOINT_B_Y),
                 entityData.get(ENDPOINT_B_Z)
         );
+    }
+
+    public boolean isJumperWire() {
+        return entityData.get(JUMPER_WIRE);
+    }
+
+    public void setJumperWire(boolean jumperWire) {
+        entityData.set(JUMPER_WIRE, jumperWire);
     }
 
     public Vec3 getEndpointWorldPosition(BlockPos endpoint) {
@@ -777,6 +796,8 @@ public class WireEntity extends Entity {
 
         tag.putBoolean("ReconnectableA", isReconnectableA());
         tag.putBoolean("ReconnectableB", isReconnectableB());
+
+        tag.putBoolean("JumperWire", isJumperWire());
     }
 
     @Override
@@ -912,6 +933,11 @@ public class WireEntity extends Entity {
                 tag.getBoolean("ReconnectableB")
         );
 
+        entityData.set(
+                JUMPER_WIRE,
+                tag.getBoolean("JumperWire")
+        );
+
 
         syncSupportPoints(supportPoints);
 
@@ -1021,6 +1047,7 @@ public class WireEntity extends Entity {
         super.remove(reason);
     }
 
+
     /**
      * 指定位置にある碍子から、この電線の登録を解除する。
      */
@@ -1028,7 +1055,6 @@ public class WireEntity extends Entity {
             BlockPos pos,
             UUID wireId
     ) {
-        // チャンク未ロード時はアクセスしない。
         if (!level().hasChunkAt(pos)) {
             return;
         }
@@ -1041,8 +1067,12 @@ public class WireEntity extends Entity {
         }
 
         if (blockEntity instanceof StrainInsulatorBlockEntity strainEntity) {
-            strainEntity.removeRetainedWire(wireId);
-            strainEntity.removeJumperWire(wireId);
+
+            if (isJumperWire()) {
+                strainEntity.removeJumperWire(wireId);
+            } else {
+                strainEntity.removeRetainedWire(wireId);
+            }
         }
     }
 }
