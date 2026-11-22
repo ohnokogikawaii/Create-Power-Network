@@ -114,7 +114,11 @@ public class StrainInsulatorBlock extends BaseEntityBlock
     @Override
     public List<ConnectionPoint> getConnectionPoints(BlockState state) {
         Vec3 local = rotatePosition(
-                new Vec3(0.5, 0.5, 1.5 / 16.0),
+                new Vec3(
+                        8.0 / 16.0,
+                        7.0 / 16.0,
+                        0.625 / 16.0
+                ),
                 state.getValue(FACING)
         );
 
