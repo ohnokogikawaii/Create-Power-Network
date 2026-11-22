@@ -229,23 +229,53 @@ public class PASBlockEntity extends BlockEntity {
 
             if (leverState.getValue(
                     PASOperatingLeverBlock.OPEN
-            ) == open) {
-                continue;
+            ) != open) {
+                level.setBlock(
+                        leverPos,
+                        leverState.setValue(
+                                PASOperatingLeverBlock.OPEN,
+                                open
+                        ),
+                        3
+                );
             }
 
-            level.setBlock(
-                    leverPos,
-                    leverState.setValue(
-                            PASOperatingLeverBlock.OPEN,
-                            open
-                    ),
-                    3
-            );
+            syncOperatingRopes(leverPos, open);
         }
     }
 
-    public void setOpen(boolean open) {
-        setClosed(!open);
+    private void syncOperatingRopes(
+            BlockPos leverPos,
+            boolean open
+    ) {
+        BlockPos ropePos = leverPos.below();
+
+        for (int i = 0;
+             i < PASOperatingRopeBlock.MAX_ROPE_LENGTH;
+             i++) {
+
+            BlockState ropeState = level.getBlockState(ropePos);
+
+            if (!(ropeState.getBlock()
+                    instanceof PASOperatingRopeBlock)) {
+                break;
+            }
+
+            if (ropeState.getValue(
+                    PASOperatingRopeBlock.OPEN
+            ) != open) {
+                level.setBlock(
+                        ropePos,
+                        ropeState.setValue(
+                                PASOperatingRopeBlock.OPEN,
+                                open
+                        ),
+                        3
+                );
+            }
+
+            ropePos = ropePos.below();
+        }
     }
 
     public void toggle() {

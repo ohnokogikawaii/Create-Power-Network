@@ -13,6 +13,8 @@ import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -26,7 +28,21 @@ public class PASOperatingRopeBlock extends Block {
 
     public PASOperatingRopeBlock(Properties properties) {
         super(properties);
+
+        registerDefaultState(
+                stateDefinition.any().setValue(OPEN, false)
+        );
     }
+
+    @Override
+    protected void createBlockStateDefinition(
+            StateDefinition.Builder<Block, BlockState> builder
+    ) {
+        builder.add(OPEN);
+    }
+
+    public static final BooleanProperty OPEN =
+            BooleanProperty.create("open");
 
     /**
      * レバーまたは既存の紐の真下にのみ設置可能。
