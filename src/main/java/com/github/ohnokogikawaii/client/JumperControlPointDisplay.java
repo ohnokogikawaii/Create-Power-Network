@@ -183,6 +183,7 @@ public final class JumperControlPointDisplay {
      * ワールド空間の文字描画を使わず、
      * GuiGraphicsで直接画面に描画する。
      */
+
     @SubscribeEvent
     public static void onRenderGui(RenderGuiEvent.Post event) {
 
@@ -209,15 +210,8 @@ public final class JumperControlPointDisplay {
         for (WireEntity wire : wires) {
 
             List<Vec3> points = wire.getJumperControlPoints();
-            List<Integer> pointIds =
-                    wire.getJumperControlPointIds();
 
-            int count = Math.min(
-                    points.size(),
-                    pointIds.size()
-            );
-
-            if (count == 0) {
+            if (points.isEmpty()) {
                 continue;
             }
 
@@ -225,28 +219,24 @@ public final class JumperControlPointDisplay {
 
             line.append("ジャンパ線 ")
                     .append(wire.getId())
-                    .append(" : ");
+                    .append(" : 始点");
 
-            boolean hasPoint = false;
+            int displayedNumber = 0;
 
-            for (int i = 0; i < count; i++) {
+            for (int i = 0; i < points.size(); i++) {
 
                 if (JumperControlPointPlacement.isEditing(wire, i)) {
                     continue;
                 }
 
-                if (hasPoint) {
-                    line.append("   ");
-                }
+                displayedNumber++;
 
-                line.append("[")
-                        .append(pointIds.get(i))
-                        .append("]");
-
-                hasPoint = true;
+                line.append(" → ")
+                        .append(displayedNumber);
             }
 
-            if (hasPoint) {
+            if (displayedNumber > 0) {
+                line.append(" → 終点");
                 displayLines.add(line.toString());
             }
         }
@@ -262,8 +252,6 @@ public final class JumperControlPointDisplay {
         int screenHeight = minecraft.getWindow().getGuiScaledHeight();
 
         int centerX = screenWidth / 2;
-
-        // ホットバーの少し上に配置
         int baseY = screenHeight - 70;
 
         for (int i = 0; i < displayLines.size(); i++) {
@@ -276,7 +264,6 @@ public final class JumperControlPointDisplay {
             int x = centerX - textWidth / 2;
             int y = baseY - i * 13;
 
-            // 背景
             guiGraphics.fill(
                     x - 5,
                     y - 3,
@@ -285,7 +272,6 @@ public final class JumperControlPointDisplay {
                     0xB0000000
             );
 
-            // 番号
             guiGraphics.drawCenteredString(
                     font,
                     line,
@@ -295,4 +281,5 @@ public final class JumperControlPointDisplay {
             );
         }
     }
+
 }
