@@ -329,30 +329,61 @@ public final class JumperControlPointPlacement {
             );
 
             /*
-             * 曲線の各区間を半透明の水色で描画する。
+             * カメラ方向に幅を持たせた四角形としてプレビュー線を描画する。
              */
+            VertexConsumer previewConsumer =
+                    bufferSource.getBuffer(RenderType.debugQuads());
+
+            org.joml.Vector3f cameraLookVector =
+                    event.getCamera().getLookVector();
+
+            Vec3 cameraLook = new Vec3(
+                    cameraLookVector.x(),
+                    cameraLookVector.y(),
+                    cameraLookVector.z()
+            );
+
+            double halfWidth = 0.015;
+
             for (int i = 0; i < previewPath.size() - 1; i++) {
 
                 Vec3 start = previewPath.get(i);
                 Vec3 end = previewPath.get(i + 1);
 
-                consumer.addVertex(
-                                pose,
-                                (float) start.x,
-                                (float) start.y,
-                                (float) start.z
-                        )
-                        .setColor(100, 200, 255, 180)
-                        .setNormal(pose, 0.0F, 1.0F, 0.0F);
+                Vec3 direction = end.subtract(start).normalize();
 
-                consumer.addVertex(
-                                pose,
-                                (float) end.x,
-                                (float) end.y,
-                                (float) end.z
-                        )
-                        .setColor(100, 200, 255, 180)
-                        .setNormal(pose, 0.0F, 1.0F, 0.0F);
+                Vec3 side = direction.cross(cameraLook);
+
+                if (side.lengthSqr() < 1.0E-6) {
+                    side = direction.cross(new Vec3(0, 1, 0));
+                }
+
+                if (side.lengthSqr() < 1.0E-6) {
+                    continue;
+                }
+
+                side = side.normalize().scale(halfWidth);
+
+                Vec3 v1 = start.add(side);
+                Vec3 v2 = start.subtract(side);
+                Vec3 v3 = end.subtract(side);
+                Vec3 v4 = end.add(side);
+
+                previewConsumer.addVertex(pose,
+                                (float) v1.x, (float) v1.y, (float) v1.z)
+                        .setColor(100, 200, 255, 180);
+
+                previewConsumer.addVertex(pose,
+                                (float) v2.x, (float) v2.y, (float) v2.z)
+                        .setColor(100, 200, 255, 180);
+
+                previewConsumer.addVertex(pose,
+                                (float) v3.x, (float) v3.y, (float) v3.z)
+                        .setColor(100, 200, 255, 180);
+
+                previewConsumer.addVertex(pose,
+                                (float) v4.x, (float) v4.y, (float) v4.z)
+                        .setColor(100, 200, 255, 180);
             }
         }
 
@@ -389,6 +420,7 @@ public final class JumperControlPointPlacement {
         /*
          * 線と箱の描画をまとめて確定する。
          */
+        bufferSource.endBatch(RenderType.debugQuads());
         bufferSource.endBatch(RenderType.lines());
     }
 
