@@ -60,22 +60,28 @@ public final class JumperControlPointDisplay {
             return;
         }
 
+        PoseStack poseStack = event.getPoseStack();
+
+        if (poseStack == null) {
+            return;
+        }
+
+        /*
+         * 照準が合っている制御点を取得する。
+         * 箱のハイライトと番号表示の両方で同じ判定を使用する。
+         */
+        JumperControlPointPlacement.ControlPointAimTarget aimTarget =
+                JumperControlPointPlacement.findAimTarget(
+                        minecraft.level,
+                        player
+                );
+
         List<WireEntity> wires =
                 minecraft.level.getEntitiesOfClass(
                         WireEntity.class,
                         player.getBoundingBox().inflate(DISPLAY_RANGE),
                         wire -> wire.isAlive() && wire.isJumperWire()
                 );
-
-        if (wires.isEmpty()) {
-            return;
-        }
-
-        PoseStack poseStack = event.getPoseStack();
-
-        if (poseStack == null) {
-            return;
-        }
 
         Vec3 cameraPosition = event.getCamera().getPosition();
 
@@ -90,7 +96,6 @@ public final class JumperControlPointDisplay {
         var bufferSource =
                 minecraft.renderBuffers().bufferSource();
 
-
         for (WireEntity wire : wires) {
 
             List<Vec3> points = wire.getJumperControlPoints();
@@ -103,7 +108,6 @@ public final class JumperControlPointDisplay {
                     continue;
                 }
 
-                // Geometryと同じ描画座標に合わせる。
                 Vec3 position = points.get(i).add(
                         0.0,
                         0.5,
@@ -119,61 +123,72 @@ public final class JumperControlPointDisplay {
                         position.z + BOX_HALF_SIZE
                 );
 
-                // 制御点の箱
-                VertexConsumer consumer = bufferSource.getBuffer(RenderType.lines());
+                boolean highlighted =
+                        aimTarget != null
+                                && aimTarget.wire() == wire
+                                && aimTarget.index() == i;
 
-                LevelRenderer.renderLineBox(
-                        poseStack,
-                        consumer,
-                        box,
-                        0.2F,
-                        0.8F,
-                        1.0F,
-                        1.0F
-                );
-            }
-        }
-        /*
-         * 編集機を持った状態で照準が合っている制御点だけ、
-         * 箱の上に固有番号を表示する。
-         */
-        JumperControlPointPlacement.ControlPointAimTarget aimTarget =
-                JumperControlPointPlacement.findAimTarget(
-                        minecraft.level,
-                        player
-                );
+                VertexConsumer consumer =
+                        bufferSource.getBuffer(RenderType.lines());
 
-        if (aimTarget != null) {
+                /*
+                 * 照準が合っている箱は黄色、
+                 * それ以外は従来どおり水色。
+                 */
+                if (highlighted) {
 
-            WireEntity aimedWire = aimTarget.wire();
-            int aimedIndex = aimTarget.index();
+                    LevelRenderer.renderLineBox(
+                            poseStack,
+                            consumer,
+                            box,
+                            1.0F,
+                            0.9F,
+                            0.1F,
+                            1.0F
+                    );
 
-            List<Integer> aimedIds =
-                    aimedWire.getJumperControlPointIds();
+                    /*
+                     * ハイライトされた箱と同時に番号を表示する。
+                     * poseStackですでにカメラ移動しているため、
+                     * ここにはワールド座標をそのまま渡す。
+                     */
+                    if (i < pointIds.size()) {
 
-            if (aimedIndex >= 0
-                    && aimedIndex < aimedIds.size()) {
+                        DebugRenderer.renderFloatingText(
+                                poseStack,
+                                bufferSource,
+                                String.valueOf(pointIds.get(i)),
+                                position.x,
+                                position.y + 0.25,
+                                position.z,
+                                0xFFFFFF,
+                                0.04F,
+                                true,
+                                0.0F,
+                                false
+                        );
+                    }
 
-                Vec3 position = aimTarget.position();
+                } else {
 
-                DebugRenderer.renderFloatingText(
-                        poseStack,
-                        bufferSource,
-                        String.valueOf(aimedIds.get(aimedIndex)),
-                        position.x - cameraPosition.x,
-                        position.y + 0.25 - cameraPosition.y,
-                        position.z - cameraPosition.z,
-                        0xFFFFFF,
-                        0.04F,
-                        true,
-                        0.0F,
-                        false
-                );
+                    LevelRenderer.renderLineBox(
+                            poseStack,
+                            consumer,
+                            box,
+                            0.2F,
+                            0.8F,
+                            1.0F,
+                            1.0F
+                    );
+                }
             }
         }
 
         poseStack.popPose();
 
-        bufferSource.endBatch(RenderType.lines());
+        /*
+         * 箱と番号の描画バッファを確定する。
+         */
+        bufferSource.endBatch();
     }
 }
