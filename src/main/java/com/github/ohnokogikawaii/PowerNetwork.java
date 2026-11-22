@@ -50,6 +50,7 @@ public class PowerNetwork {
                                 output.accept(ModItems.SOG.get());
                                 output.accept(ModItems.SOG_LINKER.get());
                                 output.accept(ModItems.PAS_CONTROL_CABLE.get());
+                                output.accept(ModItems.JUMPER_WIRE_EDITOR.get());
                             })
                             .build()
             );

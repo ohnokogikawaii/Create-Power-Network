@@ -17,5 +17,6 @@
   "block.powernetwork.pas_operating_lever": "PAS操作レバー",
   "block.powernetwork.pas_operating_rope": "PAS操作紐",
   "block.powernetwork.sog": "SOG制御装置",
-  "item.powernetwork.sog_linker": "SOG接続器"
+  "item.powernetwork.sog_linker": "SOG接続器",
+  "item.powernetwork.jumper_wire_editor": "ジャンパ線編集器"
 }

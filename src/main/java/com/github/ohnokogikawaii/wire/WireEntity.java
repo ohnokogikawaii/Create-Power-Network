@@ -1,7 +1,10 @@
 package com.github.ohnokogikawaii.wire;
 
+import com.github.ohnokogikawaii.client.JumperWireEditorScreen;
 import com.github.ohnokogikawaii.insulator.StrainInsulatorBlockEntity;
 import com.github.ohnokogikawaii.registry.ModEntities;
+import com.github.ohnokogikawaii.registry.ModItems;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -9,12 +12,16 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.api.distmarker.Dist;
 import org.joml.Vector3f;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -23,7 +30,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import com.github.ohnokogikawaii.insulator.InsulatorBlockEntity;
-
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.loading.FMLEnvironment;
 import java.util.UUID;
 
 public class WireEntity extends Entity {
@@ -1231,18 +1239,31 @@ public class WireEntity extends Entity {
         return distance < size * size * 64.0;
     }
 
-    /**
-     * 電線が削除される際に、碍子側の支持登録も解除する。
-     *
-     * チャンクのアンロードでは支持登録を維持する。
-     * 実際に電線が破棄された場合だけ関連データを整理する。
-     */
-    /**
-     * 電線が削除される際に、碍子側の支持登録も解除する。
-     *
-     * チャンクのアンロードでは支持登録を維持する。
-     * 実際に電線が破棄された場合だけ関連データを整理する。
-     */
+    @Override
+    public InteractionResult interact(
+            Player player,
+            InteractionHand hand
+    ) {
+        if (!isJumperWire()) {
+            return InteractionResult.PASS;
+        }
+
+        if (!player.getItemInHand(hand).is(
+                ModItems.JUMPER_WIRE_EDITOR.get()
+        )) {
+            return InteractionResult.PASS;
+        }
+
+        if (level().isClientSide
+                && FMLEnvironment.dist == Dist.CLIENT) {
+
+            Minecraft.getInstance().setScreen(
+                    new JumperWireEditorScreen(this)
+            );
+        }
+
+        return InteractionResult.SUCCESS;
+    }
     /**
      * 電線が削除される際に、碍子側の接続登録も解除する。
      *

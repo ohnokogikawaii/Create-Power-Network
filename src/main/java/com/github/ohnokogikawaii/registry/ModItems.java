@@ -3,10 +3,7 @@ package com.github.ohnokogikawaii.registry;
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.pas.PASControlCableItem;
 import com.github.ohnokogikawaii.pas.SOGLinkerItem;
-import com.github.ohnokogikawaii.wire.JumperWireItem;
-import com.github.ohnokogikawaii.wire.WireBranchConnectorItem;
-import com.github.ohnokogikawaii.wire.WireCutterItem;
-import com.github.ohnokogikawaii.wire.WireItem;
+import com.github.ohnokogikawaii.wire.*;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
@@ -148,6 +145,15 @@ public final class ModItems {
                     () -> new JumperWireItem(
                             new Item.Properties().stacksTo(64),
                             ResourceLocation.parse("powernetwork:copper")
+                    )
+            );
+
+    public static final DeferredItem<JumperWireEditorItem>
+            JUMPER_WIRE_EDITOR =
+            ITEMS.register(
+                    "jumper_wire_editor",
+                    () -> new JumperWireEditorItem(
+                            new Item.Properties()
                     )
             );
 
