@@ -396,36 +396,93 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
          * 下側の四角い巻き線
          * 溝から一段下に配置する。
          */
+        // 碍子モデルの外周に合わせた巻き線の寸法
+        double lowerHalfSize = 0.096;
+
+// 溝から一段下の高さ
         double lowerOffset = -0.045;
 
-        Vec3 lower0 = corner0.add(0.0, lowerOffset, 0.0);
-        Vec3 lower1 = corner1.add(0.0, lowerOffset, 0.0);
-        Vec3 lower2 = corner2.add(0.0, lowerOffset, 0.0);
-        Vec3 lower3 = corner3.add(0.0, lowerOffset, 0.0);
+// 碍子の外周に沿う四隅
+        Vec3 lowerCorner0 = wireCenter
+                .add(grooveDirection.scale(-lowerHalfSize))
+                .add(sideDirection.scale(-lowerHalfSize));
 
-        // 四角形に沿って一周させる
-        renderTieLine(buffer, pose, lower0, lower1,
-                tieRadius, packedLight);
+        Vec3 lowerCorner1 = wireCenter
+                .add(grooveDirection.scale(lowerHalfSize))
+                .add(sideDirection.scale(-lowerHalfSize));
 
-        renderTieLine(buffer, pose, lower1, lower2,
-                tieRadius, packedLight);
+        Vec3 lowerCorner2 = wireCenter
+                .add(grooveDirection.scale(lowerHalfSize))
+                .add(sideDirection.scale(lowerHalfSize));
 
-        renderTieLine(buffer, pose, lower2, lower3,
-                tieRadius, packedLight);
+        Vec3 lowerCorner3 = wireCenter
+                .add(grooveDirection.scale(-lowerHalfSize))
+                .add(sideDirection.scale(lowerHalfSize));
 
-        renderTieLine(buffer, pose, lower3, lower0,
-                tieRadius, packedLight);
+        Vec3 lower0 = lowerCorner0.add(0.0, lowerOffset, 0.0);
+        Vec3 lower1 = lowerCorner1.add(0.0, lowerOffset, 0.0);
+        Vec3 lower2 = lowerCorner2.add(0.0, lowerOffset, 0.0);
+        Vec3 lower3 = lowerCorner3.add(0.0, lowerOffset, 0.0);
+
+        // 下側の四角い巻き線
+// 角を少し丸めながら連続して一周させる
+        Vec3[] corners = {
+                lower0, lower1, lower2, lower3, lower0
+        };
+
+        final int cornerSegments = 8;
+
+        for (int side = 0; side < 4; side++) {
+            Vec3 start = corners[side];
+            Vec3 end = corners[side + 1];
+
+            Vec3 previous = start;
+
+            for (int i = 1; i <= cornerSegments; i++) {
+                double t = (double) i / cornerSegments;
+
+                Vec3 current = start.lerp(end, t);
+
+                renderTieLine(
+                        buffer,
+                        pose,
+                        previous,
+                        current,
+                        tieRadius,
+                        packedLight
+                );
+
+                previous = current;
+            }
+        }
+
 
         /*
          * 上側のX字
          * 従来より少し上に配置する。
          */
-        double upperOffset = 0.025;
+        /*
+         * 上側のX字
+         * 下側の四角形と同じ四隅を使用する。
+         * 高さだけを上げる。
+         */
+        double upperOffset = -0.025;
 
-        Vec3 upper0 = corner0.add(0.0, upperOffset, 0.0);
-        Vec3 upper1 = corner1.add(0.0, upperOffset, 0.0);
-        Vec3 upper2 = corner2.add(0.0, upperOffset, 0.0);
-        Vec3 upper3 = corner3.add(0.0, upperOffset, 0.0);
+        Vec3 upper0 = lowerCorner0.add(
+                0.0, upperOffset - lowerOffset, 0.0
+        );
+
+        Vec3 upper1 = lowerCorner1.add(
+                0.0, upperOffset - lowerOffset, 0.0
+        );
+
+        Vec3 upper2 = lowerCorner2.add(
+                0.0, upperOffset - lowerOffset, 0.0
+        );
+
+        Vec3 upper3 = lowerCorner3.add(
+                0.0, upperOffset - lowerOffset, 0.0
+        );
 
         // X字の一本目
         renderTieLine(buffer, pose, upper0, upper2,
