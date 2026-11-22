@@ -65,6 +65,48 @@ public final class JumperControlPointNetwork {
     }
 
     /**
+     * 既存の制御点の移動要求。
+     */
+    public record MoveControlPointPayload(
+            int wireEntityId,
+            int index,
+            double x,
+            double y,
+            double z
+    ) implements CustomPacketPayload {
+
+        public static final Type<MoveControlPointPayload> TYPE =
+                new Type<>(
+                        ResourceLocation.fromNamespaceAndPath(
+                                PowerNetwork.MODID,
+                                "move_jumper_control_point"
+                        )
+                );
+
+        public static final StreamCodec<
+                RegistryFriendlyByteBuf,
+                MoveControlPointPayload
+                > STREAM_CODEC = StreamCodec.composite(
+                ByteBufCodecs.VAR_INT,
+                MoveControlPointPayload::wireEntityId,
+                ByteBufCodecs.VAR_INT,
+                MoveControlPointPayload::index,
+                ByteBufCodecs.DOUBLE,
+                MoveControlPointPayload::x,
+                ByteBufCodecs.DOUBLE,
+                MoveControlPointPayload::y,
+                ByteBufCodecs.DOUBLE,
+                MoveControlPointPayload::z,
+                MoveControlPointPayload::new
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
      * 制御点の順番変更要求。
      */
     public record ReorderControlPointPayload(
@@ -98,6 +140,7 @@ public final class JumperControlPointNetwork {
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }
+
     }
 
     /**
@@ -116,6 +159,12 @@ public final class JumperControlPointNetwork {
                 ReorderControlPointPayload.TYPE,
                 ReorderControlPointPayload.STREAM_CODEC,
                 JumperControlPointNetwork::handleReorderControlPoint
+        );
+
+        event.registrar("1").playToServer(
+                MoveControlPointPayload.TYPE,
+                MoveControlPointPayload.STREAM_CODEC,
+                JumperControlPointNetwork::handleMoveControlPoint
         );
     }
 
@@ -276,6 +325,99 @@ public final class JumperControlPointNetwork {
                         wireEntityId,
                         fromIndex,
                         toIndex
+                )
+        );
+    }
+
+    /**
+     * 既存の制御点の移動要求をサーバー側で処理する。
+     */
+    private static void handleMoveControlPoint(
+            MoveControlPointPayload payload,
+            IPayloadContext context
+    ) {
+        if (!(context.player() instanceof ServerPlayer player)) {
+            return;
+        }
+
+        if (!Double.isFinite(payload.x())
+                || !Double.isFinite(payload.y())
+                || !Double.isFinite(payload.z())) {
+            return;
+        }
+
+        if (!(player.level() instanceof net.minecraft.server.level.ServerLevel level)) {
+            return;
+        }
+
+        if (!(level.getEntity(payload.wireEntityId())
+                instanceof WireEntity wire)) {
+            return;
+        }
+
+        if (!wire.isAlive() || !wire.isJumperWire()) {
+            return;
+        }
+
+        var points = wire.getJumperControlPoints();
+
+        if (payload.index() < 0
+                || payload.index() >= points.size()) {
+            return;
+        }
+
+        // 移動前の制御点から8ブロック以内であることを確認。
+        Vec3 oldPosition = points.get(payload.index());
+
+        if (player.position().distanceToSqr(oldPosition) > 64.0) {
+            return;
+        }
+
+        // 描画位置を受信する。
+        Vec3 displayPosition = new Vec3(
+                payload.x(),
+                payload.y(),
+                payload.z()
+        );
+
+        // 移動先もプレイヤーから8ブロック以内に制限。
+        if (player.position().distanceToSqr(displayPosition) > 64.0) {
+            return;
+        }
+
+        BlockPos blockPos = BlockPos.containing(displayPosition);
+
+        if (!level.isInWorldBounds(blockPos)
+                || !level.getWorldBorder().isWithinBounds(blockPos)) {
+            return;
+        }
+
+        // Geometry側の+0.5Yに合わせて保存座標へ戻す。
+        Vec3 storedPosition = displayPosition.add(0.0, -0.5, 0.0);
+
+        wire.moveJumperControlPoint(
+                payload.index(),
+                storedPosition
+        );
+    }
+
+    /**
+     * クライアントから既存制御点の移動を要求する。
+     *
+     * positionは箱の描画位置。
+     */
+    public static void requestMoveControlPoint(
+            int wireEntityId,
+            int index,
+            Vec3 position
+    ) {
+        PacketDistributor.sendToServer(
+                new MoveControlPointPayload(
+                        wireEntityId,
+                        index,
+                        position.x,
+                        position.y,
+                        position.z
                 )
         );
     }

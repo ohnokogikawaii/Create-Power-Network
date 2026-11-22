@@ -38,6 +38,8 @@ public final class JumperControlPointPlacement {
 
     private static long firstClickTime = -1L;
 
+    private static int editingIndex = -1;
+
     private static final long DOUBLE_CLICK_INTERVAL = 350L;
 
     /*
@@ -46,11 +48,22 @@ public final class JumperControlPointPlacement {
      */
     private static final double HEIGHT_SENSITIVITY = 0.007;
 
+    public record ControlPointAimTarget(
+            WireEntity wire,
+            int index,
+            Vec3 position,
+            double distance
+    ) {
+    }
+
     private JumperControlPointPlacement() {
     }
 
     /**
      * 制御点配置モードを開始する。
+     */
+    /**
+     * 新しい制御点の追加モードを開始する。
      */
     public static void start(WireEntity wire) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -68,6 +81,7 @@ public final class JumperControlPointPlacement {
         }
 
         targetWire = wire;
+        editingIndex = -1;
 
         previewPosition = player.getEyePosition()
                 .add(player.getLookAngle().scale(2.5));
@@ -76,8 +90,52 @@ public final class JumperControlPointPlacement {
         moving = false;
 
         previousPlayerPosition = player.position();
+        firstClickTime = -1L;
+    }
+
+    /**
+     * 既存の制御点を指定して移動モードを開始する。
+     *
+     * indexは0始まり。
+     */
+    public static boolean startEditing(
+            WireEntity wire,
+            int index
+    ) {
+        Minecraft minecraft = Minecraft.getInstance();
+
+        if (wire == null
+                || wire.isRemoved()
+                || !wire.isJumperWire()) {
+            return false;
+        }
+
+        var points = wire.getJumperControlPoints();
+
+        if (index < 0 || index >= points.size()) {
+            return false;
+        }
+
+        targetWire = wire;
+        editingIndex = index;
+
+        // 保存座標を描画座標へ変換。
+        previewPosition = points.get(index).add(
+                0.0,
+                0.5,
+                0.0
+        );
+
+        active = true;
+        moving = false;
+
+        previousPlayerPosition = minecraft.player == null
+                ? null
+                : minecraft.player.position();
 
         firstClickTime = -1L;
+
+        return true;
     }
 
     /**
@@ -86,6 +144,7 @@ public final class JumperControlPointPlacement {
     private static void stop() {
         active = false;
         moving = false;
+        editingIndex = -1;
 
         targetWire = null;
         previousPlayerPosition = null;
@@ -239,17 +298,30 @@ public final class JumperControlPointPlacement {
             return;
         }
 
-        if (targetWire.getJumperControlPoints().size() >= 16) {
-            stop();
-            return;
-        }
-
-        JumperControlPointNetwork.requestAddControlPoint(
-                targetWire.getId(),
-                previewPosition
-        );
-
         WireEntity wire = targetWire;
+
+        if (editingIndex >= 0) {
+
+            // 既存の制御点を移動する。
+            JumperControlPointNetwork.requestMoveControlPoint(
+                    wire.getId(),
+                    editingIndex,
+                    previewPosition
+            );
+
+        } else {
+
+            // 新しい制御点を追加する。
+            if (wire.getJumperControlPoints().size() >= 16) {
+                stop();
+                return;
+            }
+
+            JumperControlPointNetwork.requestAddControlPoint(
+                    wire.getId(),
+                    previewPosition
+            );
+        }
 
         stop();
 
@@ -428,6 +500,76 @@ public final class JumperControlPointPlacement {
         bufferSource.endBatch(RenderType.lines());
     }
 
+    /**
+     * 視線上にある中継点の箱を検索する。
+     * 箱に当たった場合は最も近い制御点を返す。
+     */
+    public static ControlPointAimTarget findAimTarget(
+            Level level,
+            Player player
+    ) {
+        Vec3 eye = player.getEyePosition();
+        Vec3 look = player.getViewVector(1.0F).normalize();
+
+        double reach = 6.0;
+        Vec3 rayEnd = eye.add(look.scale(reach));
+
+        AABB searchArea = new AABB(eye, rayEnd).inflate(32.0);
+
+        ControlPointAimTarget bestTarget = null;
+
+        List<WireEntity> wires =
+                level.getEntitiesOfClass(
+                        WireEntity.class,
+                        searchArea,
+                        wire -> wire.isAlive() && wire.isJumperWire()
+                );
+
+        for (WireEntity wire : wires) {
+            List<Vec3> points = wire.getJumperControlPoints();
+
+            for (int i = 0; i < points.size(); i++) {
+
+                // 描画位置に合わせる。
+                Vec3 position = points.get(i).add(
+                        0.0,
+                        0.5,
+                        0.0
+                );
+
+                AABB box = new AABB(
+                        position.x - BOX_HALF_SIZE,
+                        position.y - BOX_HALF_SIZE,
+                        position.z - BOX_HALF_SIZE,
+                        position.x + BOX_HALF_SIZE,
+                        position.y + BOX_HALF_SIZE,
+                        position.z + BOX_HALF_SIZE
+                );
+
+                var hit = box.clip(eye, rayEnd);
+
+                if (hit.isEmpty()) {
+                    continue;
+                }
+
+                double distance = eye.distanceTo(hit.get());
+
+                if (bestTarget == null
+                        || distance < bestTarget.distance()) {
+
+                    bestTarget = new ControlPointAimTarget(
+                            wire,
+                            i,
+                            position,
+                            distance
+                    );
+                }
+            }
+        }
+
+        return bestTarget;
+    }
+
 
     public static boolean isActive() {
         return active;
@@ -439,5 +581,14 @@ public final class JumperControlPointPlacement {
 
     public static Vec3 getPreviewPosition() {
         return previewPosition;
+    }
+
+    public static boolean isEditing(
+            WireEntity wire,
+            int index
+    ) {
+        return active
+                && editingIndex == index
+                && targetWire == wire;
     }
 }
