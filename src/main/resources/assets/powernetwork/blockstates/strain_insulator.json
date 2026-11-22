@@ -1,0 +1,20 @@
+
+{
+  "variants": {
+    "facing=north": {
+      "model": "powernetwork:block/strain_insulator"
+    },
+    "facing=east": {
+      "model": "powernetwork:block/strain_insulator",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "powernetwork:block/strain_insulator",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "powernetwork:block/strain_insulator",
+      "y": 270
+    }
+  }
+}
