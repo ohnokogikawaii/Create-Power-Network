@@ -57,8 +57,29 @@ public class InsulatorBlock extends BaseEntityBlock
         return type;
     }
 
-    private static final VoxelShape LOW_SHAPE =
-            Block.box(0, 0, 12, 16, 16, 16);
+    private static final VoxelShape LOW_SHAPE = Shapes.or(
+            // 最下部の金具
+            Block.box(7, 0, 7, 9, 1, 9),
+
+            // 上部の溝：左側
+            Block.box(7, 4.5, 7.125, 7.75, 5.25, 8.875),
+
+            // 上部の溝：中央底面
+            Block.box(7.75, 4.5, 7, 8.25, 4.75, 9),
+
+            // 上部の溝：右側
+            Block.box(8.25, 4.5, 7.125, 9, 5.25, 8.875),
+
+            // 下部台座
+            Block.box(6.5, 1, 6.5, 9.5, 2, 9.5),
+
+            // 中央の碍子本体
+            Block.box(6.5, 2, 6.5, 9.5, 4, 9.5),
+
+            // 上部の首
+            Block.box(6.75, 4, 6.75, 9.25, 4.5, 9.25)
+    );
+
 
     private static final VoxelShape HIGH_SHAPE = Shapes.or(
             Block.box(3, 0, 3, 13, 2, 13),
@@ -202,7 +223,7 @@ public class InsulatorBlock extends BaseEntityBlock
         }
 
         double height = switch (type) {
-            case LOW_VOLTAGE -> 11.5 / 16.0;
+            case LOW_VOLTAGE -> 5.0 / 16.0;
             case HIGH_VOLTAGE -> 12.5 / 16.0;
             case EXTRA_HIGH_VOLTAGE -> 14.5 / 16.0;
             case TRANSMISSION_LINE -> 0.5;
