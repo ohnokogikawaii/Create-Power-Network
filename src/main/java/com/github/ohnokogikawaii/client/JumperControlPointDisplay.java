@@ -7,9 +7,9 @@ import com.github.ohnokogikawaii.wire.WireEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.debug.DebugRenderer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -48,6 +48,7 @@ public final class JumperControlPointDisplay {
             return;
         }
 
+        // 編集機をメインハンドまたはオフハンドに持っているか
         boolean holdingEditor =
                 player.getMainHandItem().is(
                         ModItems.JUMPER_WIRE_EDITOR.get()
@@ -66,16 +67,14 @@ public final class JumperControlPointDisplay {
             return;
         }
 
-        /*
-         * 照準が合っている制御点を取得する。
-         * 箱のハイライトと番号表示の両方で同じ判定を使用する。
-         */
+        // 照準が合っている制御点を取得
         JumperControlPointPlacement.ControlPointAimTarget aimTarget =
                 JumperControlPointPlacement.findAimTarget(
                         minecraft.level,
                         player
                 );
 
+        // 周囲のジャンパ線を取得
         List<WireEntity> wires =
                 minecraft.level.getEntitiesOfClass(
                         WireEntity.class,
@@ -83,10 +82,15 @@ public final class JumperControlPointDisplay {
                         wire -> wire.isAlive() && wire.isJumperWire()
                 );
 
+        if (wires.isEmpty()) {
+            return;
+        }
+
         Vec3 cameraPosition = event.getCamera().getPosition();
 
         poseStack.pushPose();
 
+        // カメラ位置を基準に描画
         poseStack.translate(
                 -cameraPosition.x,
                 -cameraPosition.y,
@@ -96,14 +100,17 @@ public final class JumperControlPointDisplay {
         var bufferSource =
                 minecraft.renderBuffers().bufferSource();
 
+        // ==========================================
+        // 制御点の箱を描画
+        // ==========================================
+
         for (WireEntity wire : wires) {
 
             List<Vec3> points = wire.getJumperControlPoints();
-            List<Integer> pointIds = wire.getJumperControlPointIds();
 
             for (int i = 0; i < points.size(); i++) {
 
-                // 現在移動中の制御点は元の場所に描画しない。
+                // 移動中の制御点は元の位置に描画しない
                 if (JumperControlPointPlacement.isEditing(wire, i)) {
                     continue;
                 }
@@ -123,6 +130,7 @@ public final class JumperControlPointDisplay {
                         position.z + BOX_HALF_SIZE
                 );
 
+                // 現在照準が合っている箱か
                 boolean highlighted =
                         aimTarget != null
                                 && aimTarget.wire() == wire
@@ -131,12 +139,9 @@ public final class JumperControlPointDisplay {
                 VertexConsumer consumer =
                         bufferSource.getBuffer(RenderType.lines());
 
-                /*
-                 * 照準が合っている箱は黄色、
-                 * それ以外は従来どおり水色。
-                 */
                 if (highlighted) {
 
+                    // 選択中の箱は黄色
                     LevelRenderer.renderLineBox(
                             poseStack,
                             consumer,
@@ -147,30 +152,9 @@ public final class JumperControlPointDisplay {
                             1.0F
                     );
 
-                    /*
-                     * ハイライトされた箱と同時に番号を表示する。
-                     * poseStackですでにカメラ移動しているため、
-                     * ここにはワールド座標をそのまま渡す。
-                     */
-                    if (i < pointIds.size()) {
-
-                        DebugRenderer.renderFloatingText(
-                                poseStack,
-                                bufferSource,
-                                String.valueOf(pointIds.get(i)),
-                                position.x,
-                                position.y + 0.25,
-                                position.z,
-                                0xFFFFFF,
-                                0.04F,
-                                true,
-                                0.0F,
-                                false
-                        );
-                    }
-
                 } else {
 
+                    // 通常の箱は水色
                     LevelRenderer.renderLineBox(
                             poseStack,
                             consumer,
@@ -184,11 +168,58 @@ public final class JumperControlPointDisplay {
             }
         }
 
-        poseStack.popPose();
+        // 箱の描画を先に確定
+        bufferSource.endBatch(RenderType.lines());
 
-        /*
-         * 箱と番号の描画バッファを確定する。
-         */
+        // ==========================================
+        // 選択中の制御点番号を描画
+        // ==========================================
+
+        if (aimTarget != null) {
+
+            WireEntity aimedWire = aimTarget.wire();
+            int aimedIndex = aimTarget.index();
+
+            List<Integer> pointIds =
+                    aimedWire.getJumperControlPointIds();
+
+            if (aimedWire.isAlive()
+                    && aimedIndex >= 0
+                    && aimedIndex < pointIds.size()
+                    && !JumperControlPointPlacement.isEditing(
+                    aimedWire,
+                    aimedIndex
+            )) {
+
+                Vec3 position = aimTarget.position();
+
+                String number =
+                        String.valueOf(pointIds.get(aimedIndex));
+
+                /*
+                 * DebugRendererはPoseStackにカメラ移動が
+                 * 適用されている状態で使用する。
+                 * そのため座標はワールド座標を渡す。
+                 */
+                DebugRenderer.renderFloatingText(
+                        poseStack,
+                        bufferSource,
+                        number,
+                        position.x,
+                        position.y + 0.30,
+                        position.z,
+                        0xFFFFFF,
+                        0.05F,
+                        true,
+                        0.0F,
+                        true
+                );
+            }
+        }
+
+        // 番号の描画を確定
         bufferSource.endBatch();
+
+        poseStack.popPose();
     }
 }
