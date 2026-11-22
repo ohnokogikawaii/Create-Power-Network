@@ -3,6 +3,7 @@ package com.github.ohnokogikawaii.registry;
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.pas.PASControlCableItem;
 import com.github.ohnokogikawaii.pas.SOGLinkerItem;
+import com.github.ohnokogikawaii.wire.JumperWireItem;
 import com.github.ohnokogikawaii.wire.WireBranchConnectorItem;
 import com.github.ohnokogikawaii.wire.WireCutterItem;
 import com.github.ohnokogikawaii.wire.WireItem;
@@ -139,6 +140,15 @@ public final class ModItems {
             ITEMS.registerSimpleBlockItem(
                     "strain_insulator",
                     ModBlocks.STRAIN_INSULATOR
+            );
+
+    public static final DeferredItem<JumperWireItem> JUMPER_WIRE =
+            ITEMS.register(
+                    "jumper_wire",
+                    () -> new JumperWireItem(
+                            new Item.Properties().stacksTo(64),
+                            ResourceLocation.parse("powernetwork:copper")
+                    )
             );
 
     private ModItems() {

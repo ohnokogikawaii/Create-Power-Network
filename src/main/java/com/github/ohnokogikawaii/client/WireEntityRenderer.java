@@ -48,8 +48,22 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
     ) {
         Vec3 origin = entity.getPosition(partialTick);
 
-        Vec3 a = entity.getEndpointAPosition().subtract(origin);
-        Vec3 b = entity.getEndpointBPosition().subtract(origin);
+        Vec3 endpointA = entity.getEndpointAPosition();
+        Vec3 endpointB = entity.getEndpointBPosition();
+
+        /*
+         * ジャンパ線は耐張碍子の接続位置から
+         * 0.5ブロック上に持ち上げて描画する。
+         *
+         * 実際の接続座標・ブロック位置は変更しない。
+         */
+        if (entity.isJumperWire()) {
+            endpointA = endpointA.add(0.0, 0.5, 0.0);
+            endpointB = endpointB.add(0.0, 0.5, 0.0);
+        }
+
+        Vec3 a = endpointA.subtract(origin);
+        Vec3 b = endpointB.subtract(origin);
 
         double chordLength = a.distanceTo(b);
 
@@ -68,13 +82,26 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
         /*
          * A・B間にある支持点を含めた中心線を生成する。
          */
-        List<Vec3> centers = createSupportedCenterline(
-                entity,
-                a,
-                b,
-                origin,
-                wireType.canSag()
-        );
+        List<Vec3> centers;
+
+        if (entity.isJumperWire()) {
+
+            /*
+             * テスト段階では弛みを付けず、
+             * 2点間を最短距離の直線で接続する。
+             */
+            centers = List.of(a, b);
+
+        } else {
+
+            centers = createSupportedCenterline(
+                    entity,
+                    a,
+                    b,
+                    origin,
+                    wireType.canSag()
+            );
+        }
 
         if (centers.size() < 2) {
             return;
