@@ -22,24 +22,40 @@ public final class JumperWireGeometry {
     }
 
     /**
-     * ジャンパ線の曲線上の座標一覧を取得する。
+     * 登録済みの制御点を使用してジャンパ線の曲線を生成する。
      */
     public static List<Vec3> getPath(WireEntity wire) {
+        return getPath(wire, null);
+    }
+
+    /**
+     * 登録済みの制御点に加えて、仮の制御点を含めた曲線を生成する。
+     *
+     * additionalControlPoint は保存時と同じワールド座標で受け取る。
+     */
+    public static List<Vec3> getPath(
+            WireEntity wire,
+            Vec3 additionalControlPoint
+    ) {
         if (wire == null || !wire.isJumperWire()) {
             return List.of();
         }
 
         List<Vec3> anchors = new ArrayList<>();
 
-        // 描画位置に合わせて両端を0.5ブロック上げる。
         anchors.add(
                 wire.getEndpointAWorldPosition()
                         .add(0.0, 0.5, 0.0)
         );
 
-        // 保存されている制御点も同じ高さ基準にする。
         for (Vec3 point : wire.getJumperControlPoints()) {
             anchors.add(point.add(0.0, 0.5, 0.0));
+        }
+
+        if (additionalControlPoint != null) {
+            anchors.add(
+                    additionalControlPoint.add(0.0, 0.5, 0.0)
+            );
         }
 
         anchors.add(
@@ -74,7 +90,6 @@ public final class JumperWireGeometry {
             );
 
             for (int j = 0; j <= samples; j++) {
-                // 前区間の終点と重複する点を除外する。
                 if (i > 0 && j == 0) {
                     continue;
                 }

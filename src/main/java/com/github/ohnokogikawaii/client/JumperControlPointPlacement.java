@@ -2,13 +2,13 @@ package com.github.ohnokogikawaii.client;
 
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.network.JumperControlPointNetwork;
+import com.github.ohnokogikawaii.wire.JumperWireGeometry;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -36,14 +36,15 @@ public final class JumperControlPointPlacement {
 
     private static Vec3 previousPlayerPosition;
 
-    private static float lockedYaw;
-    private static float lockedPitch;
-
     private static long firstClickTime = -1L;
 
     private static final long DOUBLE_CLICK_INTERVAL = 350L;
 
-    private static final double HEIGHT_SENSITIVITY = 0.025;
+    /*
+     * マウス移動1ピクセルあたりの高さ変化量。
+     * 100ピクセルの移動で約1ブロック。
+     */
+    private static final double HEIGHT_SENSITIVITY = 0.007;
 
     private JumperControlPointPlacement() {
     }
@@ -76,9 +77,6 @@ public final class JumperControlPointPlacement {
 
         previousPlayerPosition = player.position();
 
-        lockedYaw = player.getYRot();
-        lockedPitch = player.getXRot();
-
         firstClickTime = -1L;
     }
 
@@ -93,6 +91,22 @@ public final class JumperControlPointPlacement {
         previousPlayerPosition = null;
 
         firstClickTime = -1L;
+    }
+
+    /**
+     * Mixinから呼び出す。
+     * マウスの上下移動量をプレビュー位置に反映する。
+     */
+    public static void applyMouseVerticalDelta(double deltaY) {
+        if (!active || !moving || !Double.isFinite(deltaY)) {
+            return;
+        }
+
+        previewPosition = previewPosition.add(
+                0.0,
+                -deltaY * HEIGHT_SENSITIVITY,
+                0.0
+        );
     }
 
     /**
@@ -117,10 +131,6 @@ public final class JumperControlPointPlacement {
                 }
 
                 moving = true;
-
-                lockedYaw = player.getYRot();
-                lockedPitch = player.getXRot();
-
                 previousPlayerPosition = player.position();
                 firstClickTime = -1L;
             }
@@ -203,6 +213,7 @@ public final class JumperControlPointPlacement {
 
         /*
          * プレイヤーの実際の移動量を取得する。
+         * 箱も同じ量だけ移動させる。
          */
         Vec3 currentPosition = player.position();
 
@@ -215,26 +226,6 @@ public final class JumperControlPointPlacement {
         }
 
         previousPlayerPosition = currentPosition;
-
-        /*
-         * マウス上下による視点の変化量を制御点の高さへ反映する。
-         */
-        float currentPitch = player.getXRot();
-
-        float pitchDifference = lockedPitch - currentPitch;
-
-        previewPosition = previewPosition.add(
-                0.0,
-                pitchDifference * HEIGHT_SENSITIVITY,
-                0.0
-        );
-
-        /*
-         * 視点を固定する。
-         */
-        player.setYRot(lockedYaw);
-        player.setYHeadRot(lockedYaw);
-        player.setXRot(lockedPitch);
     }
 
     /**
@@ -267,8 +258,9 @@ public final class JumperControlPointPlacement {
         );
     }
 
+
     /**
-     * ワールド上にプレビュー箱を描画する。
+     * ワールド上に制御点の箱とジャンパ線の仮プレビューを描画する。
      */
     @SubscribeEvent
     public static void onRenderLevel(RenderLevelStageEvent event) {
@@ -288,19 +280,11 @@ public final class JumperControlPointPlacement {
 
         Vec3 cameraPosition = event.getCamera().getPosition();
 
-        double halfSize = 0.10;
-
-        AABB box = new AABB(
-                previewPosition.x - halfSize,
-                previewPosition.y - halfSize,
-                previewPosition.z - halfSize,
-                previewPosition.x + halfSize,
-                previewPosition.y + halfSize,
-                previewPosition.z + halfSize
-        );
-
         poseStack.pushPose();
 
+        /*
+         * ワールド座標をカメラ基準の描画座標に変換する。
+         */
         poseStack.translate(
                 -cameraPosition.x,
                 -cameraPosition.y,
@@ -312,6 +296,79 @@ public final class JumperControlPointPlacement {
 
         VertexConsumer consumer =
                 bufferSource.getBuffer(RenderType.lines());
+
+        PoseStack.Pose pose = poseStack.last();
+
+        /*
+         * 右クリックを離している間は、
+         * 仮の制御点を通るジャンパ線を描画する。
+         */
+        if (!moving
+                && targetWire != null
+                && !targetWire.isRemoved()) {
+
+            /*
+             * previewPositionは描画上の箱の中心位置。
+             *
+             * JumperWireGeometry側で+0.5Yするため、
+             * ここでは0.5Y引いて保存時と同じ座標に戻す。
+             */
+            Vec3 storedPreviewPosition = previewPosition.add(
+                    0.0,
+                    -0.5,
+                    0.0
+            );
+
+            /*
+             * 既存の制御点と仮の制御点を使用して曲線を生成する。
+             * この処理では実際のワイヤーデータは変更しない。
+             */
+            var previewPath = JumperWireGeometry.getPath(
+                    targetWire,
+                    storedPreviewPosition
+            );
+
+            /*
+             * 曲線の各区間を半透明の水色で描画する。
+             */
+            for (int i = 0; i < previewPath.size() - 1; i++) {
+
+                Vec3 start = previewPath.get(i);
+                Vec3 end = previewPath.get(i + 1);
+
+                consumer.addVertex(
+                                pose,
+                                (float) start.x,
+                                (float) start.y,
+                                (float) start.z
+                        )
+                        .setColor(100, 200, 255, 100)
+                        .setNormal(pose, 0.0F, 1.0F, 0.0F);
+
+                consumer.addVertex(
+                                pose,
+                                (float) end.x,
+                                (float) end.y,
+                                (float) end.z
+                        )
+                        .setColor(100, 200, 255, 100)
+                        .setNormal(pose, 0.0F, 1.0F, 0.0F);
+            }
+        }
+
+        /*
+         * 制御点のプレビュー箱を描画する。
+         */
+        double halfSize = 0.10;
+
+        AABB box = new AABB(
+                previewPosition.x - halfSize,
+                previewPosition.y - halfSize,
+                previewPosition.z - halfSize,
+                previewPosition.x + halfSize,
+                previewPosition.y + halfSize,
+                previewPosition.z + halfSize
+        );
 
         float red = moving ? 1.0F : 0.2F;
         float green = moving ? 0.5F : 1.0F;
@@ -329,11 +386,19 @@ public final class JumperControlPointPlacement {
 
         poseStack.popPose();
 
+        /*
+         * 線と箱の描画をまとめて確定する。
+         */
         bufferSource.endBatch(RenderType.lines());
     }
 
+
     public static boolean isActive() {
         return active;
+    }
+
+    public static boolean isMoving() {
+        return active && moving;
     }
 
     public static Vec3 getPreviewPosition() {
