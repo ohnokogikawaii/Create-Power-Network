@@ -227,9 +227,83 @@ public class WireCutterItem extends Item {
         );
     }
 
+    private record AimDistance(
+            double distanceAlongRay,
+            double distanceToRay
+    ) {
+    }
+
+    private static AimDistance calculateAimDistance(
+            Vec3 rayStart,
+            Vec3 rayEnd,
+            Vec3 wireStart,
+            Vec3 wireEnd
+    ) {
+        Vec3 u = wireEnd.subtract(wireStart);
+        Vec3 v = rayEnd.subtract(rayStart);
+        Vec3 w = wireStart.subtract(rayStart);
+
+        double a = u.dot(u);
+        double b = u.dot(v);
+        double c = v.dot(v);
+        double d = u.dot(w);
+        double e = v.dot(w);
+
+        double s;
+        double t;
+
+        if (a < 1.0E-8 && c < 1.0E-8) {
+            s = 0.0;
+            t = 0.0;
+        } else if (a < 1.0E-8) {
+            s = 0.0;
+            t = clamp(e / c, 0.0, 1.0);
+        } else if (c < 1.0E-8) {
+            t = 0.0;
+            s = clamp(-d / a, 0.0, 1.0);
+        } else {
+            double denominator = a * c - b * b;
+
+            if (Math.abs(denominator) > 1.0E-8) {
+                s = clamp(
+                        (b * e - c * d) / denominator,
+                        0.0,
+                        1.0
+                );
+            } else {
+                s = 0.0;
+            }
+
+            t = (b * s + e) / c;
+
+            if (t < 0.0) {
+                t = 0.0;
+                s = clamp(-d / a, 0.0, 1.0);
+            } else if (t > 1.0) {
+                t = 1.0;
+                s = clamp((b - d) / a, 0.0, 1.0);
+            }
+        }
+
+        Vec3 closestOnWire = wireStart.add(u.scale(s));
+        Vec3 closestOnRay = rayStart.add(v.scale(t));
+
+        return new AimDistance(
+                rayStart.distanceTo(closestOnRay),
+                closestOnWire.distanceTo(closestOnRay)
+        );
+    }
+
+    private static double clamp(
+            double value,
+            double min,
+            double max
+    ) {
+        return Math.max(min, Math.min(max, value));
+    }
+
     /**
-     * ワイヤーカッターの照準対象を取得する。
-     *
+     * ワイヤーカッターの照準対象を取得する
      * 6ブロック以内にある配線を探し、
      * 3ブロック以内かつ判定幅以内なら切断可能とする。
      */
@@ -239,7 +313,6 @@ public class WireCutterItem extends Item {
     ) {
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getViewVector(1.0F).normalize();
-
         Vec3 rayEnd = eye.add(look.scale(AIM_REACH));
 
         AABB searchArea = new AABB(eye, rayEnd).inflate(64.0);
@@ -253,42 +326,45 @@ public class WireCutterItem extends Item {
         )) {
             List<Vec3> path = getAimPath(wire);
 
-            for (Vec3 point : path) {
-                Vec3 fromEye = point.subtract(eye);
+            for (int i = 0; i < path.size() - 1; i++) {
+                AimDistance distance = calculateAimDistance(
+                        eye,
+                        rayEnd,
+                        path.get(i),
+                        path.get(i + 1)
+                );
 
-                double alongRay = fromEye.dot(look);
-
-                if (alongRay < 0.0 || alongRay > AIM_REACH) {
+                if (distance.distanceAlongRay() < 0.0
+                        || distance.distanceAlongRay() > AIM_REACH) {
                     continue;
                 }
 
-                Vec3 closestOnRay = eye.add(
-                        look.scale(alongRay)
-                );
-
-                double distance = point.distanceTo(closestOnRay);
-
-                if (distance > AIM_DISTANCE) {
+                if (distance.distanceToRay() > AIM_DISTANCE) {
                     continue;
                 }
 
                 boolean canCut =
-                        alongRay <= REACH
-                                && distance <= MAX_HIT_DISTANCE;
+                        distance.distanceAlongRay() <= REACH
+                                && distance.distanceToRay() <= MAX_HIT_DISTANCE;
+
+                WireAimTarget candidate = new WireAimTarget(
+                        wire,
+                        distance.distanceAlongRay(),
+                        distance.distanceToRay(),
+                        canCut
+                );
 
                 if (bestTarget == null
-                        || alongRay < bestTarget.distanceAlongRay()
+                        || candidate.distanceToRay()
+                        < bestTarget.distanceToRay()
                         || (Math.abs(
-                        alongRay - bestTarget.distanceAlongRay()
+                        candidate.distanceToRay()
+                                - bestTarget.distanceToRay()
                 ) < 1.0E-6
-                        && distance < bestTarget.distanceToRay())) {
+                        && candidate.distanceAlongRay()
+                        < bestTarget.distanceAlongRay())) {
 
-                    bestTarget = new WireAimTarget(
-                            wire,
-                            alongRay,
-                            distance,
-                            canCut
-                    );
+                    bestTarget = candidate;
                 }
             }
         }
