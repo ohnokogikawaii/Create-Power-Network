@@ -311,6 +311,24 @@ public class WireCutterItem extends Item {
             Level level,
             Player player
     ) {
+        return findAimTarget(level, player, false);
+    }
+
+    /**
+     * ジャンパ線だけを照準対象として検索する。
+     */
+    public static WireAimTarget findJumperAimTarget(
+            Level level,
+            Player player
+    ) {
+        return findAimTarget(level, player, true);
+    }
+
+    private static WireAimTarget findAimTarget(
+            Level level,
+            Player player,
+            boolean jumperOnly
+    ) {
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getViewVector(1.0F).normalize();
         Vec3 rayEnd = eye.add(look.scale(AIM_REACH));
@@ -324,6 +342,10 @@ public class WireCutterItem extends Item {
                 searchArea,
                 Entity::isAlive
         )) {
+            if (jumperOnly && !wire.isJumperWire()) {
+                continue;
+            }
+
             List<Vec3> path = getAimPath(wire);
 
             for (int i = 0; i < path.size() - 1; i++) {

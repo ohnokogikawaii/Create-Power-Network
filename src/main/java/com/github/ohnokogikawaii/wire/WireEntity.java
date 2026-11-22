@@ -1227,6 +1227,8 @@ public class WireEntity extends Entity {
         ).inflate(1.0);
     }
 
+
+
     @Override
     public boolean shouldRenderAtSqrDistance(
             double distance
@@ -1239,31 +1241,7 @@ public class WireEntity extends Entity {
         return distance < size * size * 64.0;
     }
 
-    @Override
-    public InteractionResult interact(
-            Player player,
-            InteractionHand hand
-    ) {
-        if (!isJumperWire()) {
-            return InteractionResult.PASS;
-        }
 
-        if (!player.getItemInHand(hand).is(
-                ModItems.JUMPER_WIRE_EDITOR.get()
-        )) {
-            return InteractionResult.PASS;
-        }
-
-        if (level().isClientSide
-                && FMLEnvironment.dist == Dist.CLIENT) {
-
-            Minecraft.getInstance().setScreen(
-                    new JumperWireEditorScreen(this)
-            );
-        }
-
-        return InteractionResult.SUCCESS;
-    }
     /**
      * 電線が削除される際に、碍子側の接続登録も解除する。
      *
