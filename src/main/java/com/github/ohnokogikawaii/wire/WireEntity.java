@@ -628,6 +628,40 @@ public class WireEntity extends Entity {
     }
 
     /**
+     * 制御点の順番を変更する。
+     *
+     * fromIndex: 移動元
+     * toIndex: 移動先
+     */
+    public boolean reorderJumperControlPoint(
+            int fromIndex,
+            int toIndex
+    ) {
+        if (!isJumperWire()) {
+            return false;
+        }
+
+        List<Vec3> points =
+                new ArrayList<>(getJumperControlPoints());
+
+        if (fromIndex < 0 || fromIndex >= points.size()
+                || toIndex < 0 || toIndex >= points.size()) {
+            return false;
+        }
+
+        if (fromIndex == toIndex) {
+            return true;
+        }
+
+        Vec3 point = points.remove(fromIndex);
+        points.add(toIndex, point);
+
+        syncJumperControlPoints(points);
+
+        return true;
+    }
+
+    /**
      * 指定番号の制御点を削除する。
      */
     public boolean removeJumperControlPoint(int index) {

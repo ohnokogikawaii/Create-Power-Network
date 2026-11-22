@@ -1,14 +1,24 @@
+
 package com.github.ohnokogikawaii.client;
 
+import com.github.ohnokogikawaii.network.JumperControlPointNetwork;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.List;
 
 public class JumperWireEditorScreen extends Screen {
 
     private final WireEntity wire;
+
+    private List<Vec3> displayedPoints = List.of();
+
+    private static final int ROW_HEIGHT = 20;
+    private static final int ROW_TOP = 48;
 
     public JumperWireEditorScreen(WireEntity wire) {
         super(Component.literal("ジャンパ線編集"));
@@ -17,39 +27,111 @@ public class JumperWireEditorScreen extends Screen {
 
     @Override
     protected void init() {
+        if (wire == null || wire.isRemoved()) {
+            return;
+        }
+
+        List<Vec3> points = wire.getJumperControlPoints();
+        displayedPoints = List.copyOf(points);
+
         int centerX = this.width / 2;
-        int centerY = this.height / 2;
 
-        boolean canAdd =
-                !wire.isRemoved()
-                        && wire.getJumperControlPoints().size() < 16;
+        for (int i = 0; i < points.size(); i++) {
+            final int index = i;
 
-        addRenderableWidget(
-                Button.builder(
-                        Component.literal("制御点を追加"),
-                        button -> {
-                            JumperControlPointPlacement.start(wire);
-                            onClose();
-                        }
-                ).bounds(
-                        centerX - 75,
-                        centerY + 15,
-                        150,
-                        20
-                ).build()
-        ).active = canAdd;
+            int column = i / 8;
+            int row = i % 8;
+
+            int columnX = centerX - 150 + column * 155;
+            int rowY = ROW_TOP + row * ROW_HEIGHT;
+
+            Button upButton = Button.builder(
+                    Component.literal("↑"),
+                    button -> {
+                        JumperControlPointNetwork.requestReorderControlPoint(
+                                wire.getId(),
+                                index,
+                                index - 1
+                        );
+                    }
+            ).bounds(
+                    columnX + 88,
+                    rowY,
+                    22,
+                    18
+            ).build();
+
+            upButton.active = index > 0;
+            addRenderableWidget(upButton);
+
+            Button downButton = Button.builder(
+                    Component.literal("↓"),
+                    button -> {
+                        JumperControlPointNetwork.requestReorderControlPoint(
+                                wire.getId(),
+                                index,
+                                index + 1
+                        );
+                    }
+            ).bounds(
+                    columnX + 113,
+                    rowY,
+                    22,
+                    18
+            ).build();
+
+            downButton.active = index < points.size() - 1;
+            addRenderableWidget(downButton);
+        }
+
+        boolean canAdd = points.size() < 16;
+
+        Button addButton = Button.builder(
+                Component.literal("制御点を追加"),
+                button -> {
+                    JumperControlPointPlacement.start(wire);
+                    onClose();
+                }
+        ).bounds(
+                centerX - 105,
+                this.height - 25,
+                100,
+                20
+        ).build();
+
+        addButton.active = canAdd;
+        addRenderableWidget(addButton);
 
         addRenderableWidget(
                 Button.builder(
                         Component.literal("閉じる"),
                         button -> onClose()
                 ).bounds(
-                        centerX - 50,
-                        centerY + 45,
+                        centerX + 5,
+                        this.height - 25,
                         100,
                         20
                 ).build()
         );
+    }
+
+    /**
+     * サーバーから制御点の順番変更が同期されたら、
+     * ボタンと番号を再構築する。
+     */
+    @Override
+    public void tick() {
+        super.tick();
+
+        if (wire == null || wire.isRemoved()) {
+            return;
+        }
+
+        List<Vec3> currentPoints = wire.getJumperControlPoints();
+
+        if (!currentPoints.equals(displayedPoints)) {
+            rebuildWidgets();
+        }
     }
 
     @Override
@@ -63,44 +145,59 @@ public class JumperWireEditorScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
 
         int centerX = this.width / 2;
-        int centerY = this.height / 2;
 
         graphics.drawCenteredString(
                 this.font,
                 this.title,
                 centerX,
-                centerY - 55,
+                12,
                 0xFFFFFF
         );
 
-        if (wire.isRemoved()) {
+        if (wire == null || wire.isRemoved()) {
             graphics.drawCenteredString(
                     this.font,
                     "対象のジャンパ線が存在しません",
                     centerX,
-                    centerY - 15,
+                    40,
                     0xFF5555
             );
             return;
         }
 
-        int count = wire.getJumperControlPoints().size();
+        List<Vec3> points = wire.getJumperControlPoints();
 
         graphics.drawCenteredString(
                 this.font,
-                "制御点数: " + count + " / 16",
+                "制御点数: " + points.size() + " / 16",
                 centerX,
-                centerY - 25,
+                30,
                 0xFFFFFF
         );
 
-        if (count >= 16) {
+        if (points.isEmpty()) {
             graphics.drawCenteredString(
                     this.font,
-                    "制御点の上限に達しています",
+                    "制御点はありません",
                     centerX,
-                    centerY - 5,
-                    0xFF5555
+                    65,
+                    0xAAAAAA
+            );
+        }
+
+        for (int i = 0; i < points.size(); i++) {
+            int column = i / 8;
+            int row = i % 8;
+
+            int columnX = centerX - 150 + column * 155;
+            int rowY = ROW_TOP + row * ROW_HEIGHT;
+
+            graphics.drawString(
+                    this.font,
+                    "制御点 " + (i + 1),
+                    columnX + 3,
+                    rowY + 5,
+                    0xFFFFFF
             );
         }
     }
