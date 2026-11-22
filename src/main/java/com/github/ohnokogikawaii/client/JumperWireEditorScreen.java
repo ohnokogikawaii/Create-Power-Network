@@ -3,6 +3,7 @@ package com.github.ohnokogikawaii.client;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
 public class JumperWireEditorScreen extends Screen {
@@ -19,8 +20,27 @@ public class JumperWireEditorScreen extends Screen {
         int centerX = this.width / 2;
         int centerY = this.height / 2;
 
+        boolean canAdd =
+                !wire.isRemoved()
+                        && wire.getJumperControlPoints().size() < 16;
+
         addRenderableWidget(
-                net.minecraft.client.gui.components.Button.builder(
+                Button.builder(
+                        Component.literal("制御点を追加"),
+                        button -> {
+                            JumperControlPointPlacement.start(wire);
+                            onClose();
+                        }
+                ).bounds(
+                        centerX - 75,
+                        centerY + 15,
+                        150,
+                        20
+                ).build()
+        ).active = canAdd;
+
+        addRenderableWidget(
+                Button.builder(
                         Component.literal("閉じる"),
                         button -> onClose()
                 ).bounds(
@@ -40,7 +60,6 @@ public class JumperWireEditorScreen extends Screen {
             float partialTick
     ) {
         renderBackground(graphics, mouseX, mouseY, partialTick);
-
         super.render(graphics, mouseX, mouseY, partialTick);
 
         int centerX = this.width / 2;
@@ -65,29 +84,25 @@ public class JumperWireEditorScreen extends Screen {
             return;
         }
 
+        int count = wire.getJumperControlPoints().size();
+
         graphics.drawCenteredString(
                 this.font,
-                "制御点数: " + wire.getJumperControlPoints().size(),
+                "制御点数: " + count + " / 16",
                 centerX,
                 centerY - 25,
                 0xFFFFFF
         );
 
-        graphics.drawCenteredString(
-                this.font,
-                "最大制御点数: 16",
-                centerX,
-                centerY - 10,
-                0xAAAAAA
-        );
-
-        graphics.drawCenteredString(
-                this.font,
-                "制御点の追加・編集機能は次の段階で実装します",
-                centerX,
-                centerY + 15,
-                0xAAAAAA
-        );
+        if (count >= 16) {
+            graphics.drawCenteredString(
+                    this.font,
+                    "制御点の上限に達しています",
+                    centerX,
+                    centerY - 5,
+                    0xFF5555
+            );
+        }
     }
 
     @Override
