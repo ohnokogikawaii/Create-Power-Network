@@ -4,6 +4,7 @@ package com.github.ohnokogikawaii.registry;
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.hub_connector.HubConnectorBlock;
 import com.github.ohnokogikawaii.insulator.InsulatorBlock;
+import com.github.ohnokogikawaii.insulator.StrainInsulatorBlock;
 import com.github.ohnokogikawaii.pas.PASBlock;
 import com.github.ohnokogikawaii.pas.PASOperatingLeverBlock;
 import com.github.ohnokogikawaii.pas.PASOperatingRopeBlock;
@@ -107,6 +108,13 @@ public final class ModBlocks {
                             .mapColor(MapColor.METAL)
                             .strength(2.0F, 4.0F)
                             .noOcclusion()
+            );
+
+    public static final DeferredBlock<StrainInsulatorBlock> STRAIN_INSULATOR =
+            BLOCKS.registerBlock(
+                    "strain_insulator",
+                    StrainInsulatorBlock::new,
+                    insulatorProperties()
             );
 
     private static BlockBehaviour.Properties insulatorProperties() {

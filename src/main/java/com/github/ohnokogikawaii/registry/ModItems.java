@@ -135,6 +135,12 @@ public final class ModItems {
                     )
             );
 
+    public static final DeferredItem<BlockItem> STRAIN_INSULATOR =
+            ITEMS.registerSimpleBlockItem(
+                    "strain_insulator",
+                    ModBlocks.STRAIN_INSULATOR
+            );
+
     private ModItems() {
     }
 

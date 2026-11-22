@@ -2,6 +2,8 @@
 package com.github.ohnokogikawaii.wire;
 
 import com.github.ohnokogikawaii.PowerNetwork;
+import com.github.ohnokogikawaii.insulator.StrainInsulatorBlock;
+import com.github.ohnokogikawaii.insulator.StrainInsulatorBlockEntity;
 import com.github.ohnokogikawaii.registry.ModEntities;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -148,12 +150,33 @@ public class WireItem extends Item {
         var state = level.getBlockState(clickedPos);
 
         // 碍子は敷設ルートの始点・中間点・終点として扱う。
+        // 固定式碍子
         if (state.getBlock() instanceof InsulatorBlock insulator) {
             if (level.isClientSide) {
                 return InteractionResult.SUCCESS;
             }
 
             Vec3 position = insulator.getSupportPosition(
+                    state,
+                    clickedPos
+            );
+
+            return selectInsulator(
+                    level,
+                    player,
+                    clickedPos,
+                    position
+            );
+        }
+
+// 耐張碍子は引き留め端点として扱う。
+// 中間支持点には使用しない。
+        if (state.getBlock() instanceof StrainInsulatorBlock strainInsulator) {
+            if (level.isClientSide) {
+                return InteractionResult.SUCCESS;
+            }
+
+            Vec3 position = strainInsulator.getRetainedWirePosition(
                     state,
                     clickedPos
             );
@@ -209,6 +232,10 @@ public class WireItem extends Item {
 
         RouteState route = ROUTES.get(playerId);
 
+        boolean clickedStrain =
+                level.getBlockState(pos).getBlock()
+                        instanceof StrainInsulatorBlock;
+
         EndpointSelection selection =
                 new EndpointSelection(
                         pos,
@@ -233,6 +260,22 @@ public class WireItem extends Item {
             );
 
             return InteractionResult.SUCCESS;
+        }
+
+        // 耐張碍子は中間支持点にせず、必ず端点として扱う。
+// 始点が耐張碍子の場合も、次に選択した碍子を終点にする。
+        boolean startIsStrain =
+                level.getBlockState(route.start.anchor()).getBlock()
+                        instanceof StrainInsulatorBlock;
+
+        if (clickedStrain || startIsStrain) {
+            return finishRoute(
+                    level,
+                    player,
+                    route,
+                    selection,
+                    true
+            );
         }
 
         // 最後に選択した碍子をもう一度クリックした場合は終端
@@ -1206,9 +1249,27 @@ public class WireItem extends Item {
                 start.anchor(),
                 end.anchor()
         )) {
-            if (level.getBlockState(endpoint).getBlock()
-                    instanceof InsulatorBlock) {
+            var block = level.getBlockState(endpoint).getBlock();
 
+            // 耐張碍子は引き留め電線を1本だけ登録できる
+            if (block instanceof StrainInsulatorBlock) {
+                if (!(level.getBlockEntity(endpoint)
+                        instanceof StrainInsulatorBlockEntity be)
+                        || !be.canAddRetainedWire()) {
+
+                    player.displayClientMessage(
+                            Component.literal(
+                                    "この耐張碍子には、これ以上引き留め電線を接続できません。"
+                            ).withStyle(ChatFormatting.RED),
+                            true
+                    );
+
+                    return InteractionResult.SUCCESS;
+                }
+            }
+
+            // 固定式碍子は従来どおり
+            else if (block instanceof InsulatorBlock) {
                 if (!(level.getBlockEntity(endpoint)
                         instanceof InsulatorBlockEntity be)
                         || !be.canSupportMoreWires()) {
@@ -1317,7 +1378,9 @@ public class WireItem extends Item {
 
         // 碍子を端点として使用した場合、端末状態を設定
         if (level.getBlockState(start.anchor()).getBlock()
-                instanceof InsulatorBlock) {
+                instanceof InsulatorBlock
+                || level.getBlockState(start.anchor()).getBlock()
+                instanceof StrainInsulatorBlock) {
             wire.setTerminalA(true);
         }
 
@@ -1339,30 +1402,45 @@ public class WireItem extends Item {
         List<InsulatorBlockEntity> registered =
                 new ArrayList<>();
 
+        List<StrainInsulatorBlockEntity> registeredStrain =
+                new ArrayList<>();
+
         boolean supportFailed = false;
 
-// 始点・終点の碍子を登録
+
+        // 始点・終点の碍子を登録
         for (BlockPos endpoint : List.of(
                 start.anchor(),
                 end.anchor()
         )) {
-            if (!(level.getBlockState(endpoint).getBlock()
-                    instanceof InsulatorBlock)) {
+            var block = level.getBlockState(endpoint).getBlock();
+
+            // 耐張碍子：引き留め電線として登録
+            if (block instanceof StrainInsulatorBlock) {
+                if (!(level.getBlockEntity(endpoint)
+                        instanceof StrainInsulatorBlockEntity be)
+                        || !be.addRetainedWire(wire.getUUID())) {
+
+                    supportFailed = true;
+                    break;
+                }
+
+                registeredStrain.add(be);
                 continue;
             }
 
-            if (!(level.getBlockEntity(endpoint)
-                    instanceof InsulatorBlockEntity be)) {
-                supportFailed = true;
-                break;
-            }
+            // 固定式碍子：従来の支持登録
+            if (block instanceof InsulatorBlock) {
+                if (!(level.getBlockEntity(endpoint)
+                        instanceof InsulatorBlockEntity be)
+                        || !be.addSupportedWire(wire.getUUID())) {
 
-            if (!be.addSupportedWire(wire.getUUID())) {
-                supportFailed = true;
-                break;
-            }
+                    supportFailed = true;
+                    break;
+                }
 
-            registered.add(be);
+                registered.add(be);
+            }
         }
 
 // 中間碍子を支持点として登録
@@ -1395,6 +1473,10 @@ public class WireItem extends Item {
         if (supportFailed) {
             for (InsulatorBlockEntity be : registered) {
                 be.removeSupportedWire(wire.getUUID());
+            }
+
+            for (StrainInsulatorBlockEntity be : registeredStrain) {
+                be.removeRetainedWire(wire.getUUID());
             }
 
             wire.discard();

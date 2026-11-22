@@ -3,6 +3,7 @@ package com.github.ohnokogikawaii.registry;
 
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.insulator.InsulatorBlockEntity;
+import com.github.ohnokogikawaii.insulator.StrainInsulatorBlockEntity;
 import com.github.ohnokogikawaii.pas.PASBlockEntity;
 import com.github.ohnokogikawaii.pas.SOGBlockEntity;
 import net.minecraft.core.registries.Registries;
@@ -53,6 +54,19 @@ public final class ModBlockEntities {
                     () -> BlockEntityType.Builder.of(
                             SOGBlockEntity::new,
                             ModBlocks.SOG.get()
+                    ).build(null)
+            );
+
+    /**
+     * 耐張碍子専用のBlockEntity。
+     */
+    public static final Supplier<BlockEntityType<StrainInsulatorBlockEntity>>
+            STRAIN_INSULATOR =
+            BLOCK_ENTITY_TYPES.register(
+                    "strain_insulator",
+                    () -> BlockEntityType.Builder.of(
+                            StrainInsulatorBlockEntity::new,
+                            ModBlocks.STRAIN_INSULATOR.get()
                     ).build(null)
             );
 
