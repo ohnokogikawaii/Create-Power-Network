@@ -1,5 +1,6 @@
 package com.github.ohnokogikawaii.wire;
 
+import com.github.ohnokogikawaii.insulator.StrainInsulatorBlockEntity;
 import com.github.ohnokogikawaii.registry.ModEntities;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -11,6 +12,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
@@ -971,6 +973,12 @@ public class WireEntity extends Entity {
      * チャンクのアンロードでは支持登録を維持する。
      * 実際に電線が破棄された場合だけ関連データを整理する。
      */
+    /**
+     * 電線が削除される際に、碍子側の接続登録も解除する。
+     *
+     * チャンクのアンロードでは登録を維持する。
+     * 実際に電線が破棄された場合だけ関連データを整理する。
+     */
     @Override
     public void remove(RemovalReason reason) {
 
@@ -981,26 +989,17 @@ public class WireEntity extends Entity {
             UUID wireId = getUUID();
 
             /*
-             * 始点・終点の碍子登録を解除する。
-             *
-             * チャンクが未ロードの場合はアクセスしない。
+             * 始点・終点の登録を解除する。
              */
             for (BlockPos endpoint :
                     List.of(getEndpointA(), getEndpointB())) {
 
-                if (!level().hasChunkAt(endpoint)) {
-                    continue;
-                }
-
-                if (level().getBlockEntity(endpoint)
-                        instanceof InsulatorBlockEntity insulatorEntity) {
-
-                    insulatorEntity.removeSupportedWire(wireId);
-                }
+                removeWireRegistrationAt(endpoint, wireId);
             }
 
             /*
-             * 中間支持点の碍子登録を解除する。
+             * 中間支持点の登録を解除する。
+             * 中間支持点は従来どおり固定式碍子だけを対象とする。
              */
             for (SupportPoint point :
                     new ArrayList<>(getSupportPoints())) {
@@ -1020,5 +1019,30 @@ public class WireEntity extends Entity {
         }
 
         super.remove(reason);
+    }
+
+    /**
+     * 指定位置にある碍子から、この電線の登録を解除する。
+     */
+    private void removeWireRegistrationAt(
+            BlockPos pos,
+            UUID wireId
+    ) {
+        // チャンク未ロード時はアクセスしない。
+        if (!level().hasChunkAt(pos)) {
+            return;
+        }
+
+        BlockEntity blockEntity = level().getBlockEntity(pos);
+
+        if (blockEntity instanceof InsulatorBlockEntity insulatorEntity) {
+            insulatorEntity.removeSupportedWire(wireId);
+            return;
+        }
+
+        if (blockEntity instanceof StrainInsulatorBlockEntity strainEntity) {
+            strainEntity.removeRetainedWire(wireId);
+            strainEntity.removeJumperWire(wireId);
+        }
     }
 }
