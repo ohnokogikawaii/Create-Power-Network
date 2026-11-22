@@ -169,6 +169,26 @@ public class WireEntity extends Entity {
             );
 
     /**
+     * ジャンパ線の制御点に割り当てる固有番号。
+     * 座標リストと同じ順番で保持する。
+     */
+    private static final EntityDataAccessor<String> JUMPER_CONTROL_POINT_IDS =
+            SynchedEntityData.defineId(
+                    WireEntity.class,
+                    EntityDataSerializers.STRING
+            );
+
+    /**
+     * 次に割り当てる制御点番号。
+     * 削除された番号は再利用しない。
+     */
+    private static final EntityDataAccessor<Integer> NEXT_JUMPER_CONTROL_POINT_ID =
+            SynchedEntityData.defineId(
+                    WireEntity.class,
+                    EntityDataSerializers.INT
+            );
+
+    /**
      * A/B端点が碍子上の端末処理になっているか。
      */
     private static final EntityDataAccessor<Boolean> TERMINAL_A =
@@ -279,6 +299,8 @@ public class WireEntity extends Entity {
         builder.define(BRANCH_B_ID, -1);
         builder.define(SUPPORT_POINTS, "");
         builder.define(JUMPER_CONTROL_POINTS, "");
+        builder.define(JUMPER_CONTROL_POINT_IDS, "");
+        builder.define(NEXT_JUMPER_CONTROL_POINT_ID, 1);
         builder.define(TERMINAL_A, false);
         builder.define(TERMINAL_B, false);
 
@@ -546,7 +568,111 @@ public class WireEntity extends Entity {
     }
 
     /**
+     * 制御点の固有番号一覧を取得する。
+     *
+     * 座標リストと同じ順番で返す。
+     * 同期データが不正な場合は仮の連番を返す。
+     */
+    public List<Integer> getJumperControlPointIds() {
+        if (!isJumperWire()) {
+            return Collections.emptyList();
+        }
+
+        List<Vec3> points = getJumperControlPoints();
+
+        if (points.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        String serialized = entityData.get(JUMPER_CONTROL_POINT_IDS);
+
+        if (serialized == null || serialized.isBlank()) {
+            return createFallbackControlPointIds(points.size());
+        }
+
+        List<Integer> result = new ArrayList<>();
+
+        try {
+            for (String value : serialized.split(",")) {
+                int id = Integer.parseInt(value);
+
+                if (id <= 0 || result.contains(id)) {
+                    return createFallbackControlPointIds(points.size());
+                }
+
+                result.add(id);
+            }
+        } catch (NumberFormatException ignored) {
+            return createFallbackControlPointIds(points.size());
+        }
+
+        if (result.size() != points.size()) {
+            return createFallbackControlPointIds(points.size());
+        }
+
+        return Collections.unmodifiableList(result);
+    }
+
+    /**
+     * 不正データ・旧セーブ用の仮番号を生成する。
+     */
+    private List<Integer> createFallbackControlPointIds(int count) {
+        List<Integer> result = new ArrayList<>();
+
+        for (int i = 0; i < count; i++) {
+            result.add(i + 1);
+        }
+
+        return Collections.unmodifiableList(result);
+    }
+
+    /**
+     * 次の固有番号を割り当てる。
+     */
+    private int allocateJumperControlPointId() {
+        int nextId = entityData.get(NEXT_JUMPER_CONTROL_POINT_ID);
+
+        if (nextId <= 0) {
+            nextId = 1;
+        }
+
+        entityData.set(
+                NEXT_JUMPER_CONTROL_POINT_ID,
+                nextId + 1
+        );
+
+        return nextId;
+    }
+
+    /**
+     * 制御点番号一覧をクライアントへ同期する。
+     */
+    private void syncJumperControlPointIds(List<Integer> ids) {
+        StringBuilder builder = new StringBuilder();
+
+        for (Integer id : ids) {
+            if (id == null || id <= 0) {
+                continue;
+            }
+
+            if (!builder.isEmpty()) {
+                builder.append(",");
+            }
+
+            builder.append(id);
+        }
+
+        entityData.set(
+                JUMPER_CONTROL_POINT_IDS,
+                builder.toString()
+        );
+    }
+
+    /**
      * ジャンパ線の制御点一覧を設定する。
+     *
+     * 既存の制御点番号は、同じインデックスの位置で維持する。
+     * 新しく増えた制御点には新しい番号を割り当てる。
      */
     public boolean setJumperControlPoints(List<Vec3> points) {
         if (!isJumperWire() || points == null) {
@@ -570,7 +696,36 @@ public class WireEntity extends Entity {
             }
         }
 
+        List<Integer> ids =
+                new ArrayList<>(getJumperControlPointIds());
+
+        int maxExistingId = 0;
+
+        for (int id : ids) {
+            maxExistingId = Math.max(maxExistingId, id);
+        }
+
+        entityData.set(
+                NEXT_JUMPER_CONTROL_POINT_ID,
+                Math.max(
+                        entityData.get(NEXT_JUMPER_CONTROL_POINT_ID),
+                        maxExistingId + 1
+                )
+        );
+
+        // 制御点が減った場合、対応する番号も削除する。
+        while (ids.size() > validPoints.size()) {
+            ids.remove(ids.size() - 1);
+        }
+
+        // 制御点が増えた場合、新しい固有番号を割り当てる。
+        while (ids.size() < validPoints.size()) {
+            ids.add(allocateJumperControlPointId());
+        }
+
         syncJumperControlPoints(validPoints);
+        syncJumperControlPointIds(ids);
+
         return true;
     }
 
@@ -589,12 +744,32 @@ public class WireEntity extends Entity {
         List<Vec3> points =
                 new ArrayList<>(getJumperControlPoints());
 
+        List<Integer> ids =
+                new ArrayList<>(getJumperControlPointIds());
+
+        int maxExistingId = 0;
+
+        for (int id : ids) {
+            maxExistingId = Math.max(maxExistingId, id);
+        }
+
+        entityData.set(
+                NEXT_JUMPER_CONTROL_POINT_ID,
+                Math.max(
+                        entityData.get(NEXT_JUMPER_CONTROL_POINT_ID),
+                        maxExistingId + 1
+                )
+        );
+
         if (points.size() >= MAX_JUMPER_CONTROL_POINTS) {
             return false;
         }
 
         points.add(position);
+        ids.add(allocateJumperControlPointId());
+
         syncJumperControlPoints(points);
+        syncJumperControlPointIds(ids);
 
         return true;
     }
@@ -630,8 +805,7 @@ public class WireEntity extends Entity {
     /**
      * 制御点の順番を変更する。
      *
-     * fromIndex: 移動元
-     * toIndex: 移動先
+     * 座標と固有番号を同時に移動する。
      */
     public boolean reorderJumperControlPoint(
             int fromIndex,
@@ -643,6 +817,9 @@ public class WireEntity extends Entity {
 
         List<Vec3> points =
                 new ArrayList<>(getJumperControlPoints());
+
+        List<Integer> ids =
+                new ArrayList<>(getJumperControlPointIds());
 
         if (fromIndex < 0 || fromIndex >= points.size()
                 || toIndex < 0 || toIndex >= points.size()) {
@@ -656,7 +833,11 @@ public class WireEntity extends Entity {
         Vec3 point = points.remove(fromIndex);
         points.add(toIndex, point);
 
+        Integer id = ids.remove(fromIndex);
+        ids.add(toIndex, id);
+
         syncJumperControlPoints(points);
+        syncJumperControlPointIds(ids);
 
         return true;
     }
@@ -672,12 +853,18 @@ public class WireEntity extends Entity {
         List<Vec3> points =
                 new ArrayList<>(getJumperControlPoints());
 
+        List<Integer> ids =
+                new ArrayList<>(getJumperControlPointIds());
+
         if (index < 0 || index >= points.size()) {
             return false;
         }
 
         points.remove(index);
+        ids.remove(index);
+
         syncJumperControlPoints(points);
+        syncJumperControlPointIds(ids);
 
         return true;
     }
@@ -1033,6 +1220,17 @@ public class WireEntity extends Entity {
         }
 
         tag.put("JumperControlPoints", jumperControlList);
+        tag.putIntArray(
+                "JumperControlPointIds",
+                getJumperControlPointIds().stream()
+                        .mapToInt(Integer::intValue)
+                        .toArray()
+        );
+
+        tag.putInt(
+                "NextJumperControlPointId",
+                entityData.get(NEXT_JUMPER_CONTROL_POINT_ID)
+        );
         tag.putBoolean("TerminalA", isTerminalA());
         tag.putBoolean("TerminalB", isTerminalB());
 
@@ -1211,6 +1409,48 @@ public class WireEntity extends Entity {
         }
 
         syncJumperControlPoints(jumperControlPoints);
+
+// 保存されている固有番号を読み込む。
+        int[] savedIds = tag.getIntArray("JumperControlPointIds");
+
+        List<Integer> ids = new ArrayList<>();
+        boolean validIds = savedIds.length == jumperControlPoints.size();
+
+        if (validIds) {
+            for (int id : savedIds) {
+                if (id <= 0 || ids.contains(id)) {
+                    validIds = false;
+                    break;
+                }
+
+                ids.add(id);
+            }
+        }
+
+// 旧セーブデータ、または不正な番号データの場合は連番を割り当てる。
+        if (!validIds) {
+            ids.clear();
+
+            for (int i = 0; i < jumperControlPoints.size(); i++) {
+                ids.add(i + 1);
+            }
+        }
+
+        syncJumperControlPointIds(ids);
+
+// 次の番号が既存番号と重複しないようにする。
+        int maxId = 0;
+
+        for (int id : ids) {
+            maxId = Math.max(maxId, id);
+        }
+
+        int savedNextId = tag.getInt("NextJumperControlPointId");
+
+        entityData.set(
+                NEXT_JUMPER_CONTROL_POINT_ID,
+                Math.max(Math.max(savedNextId, maxId + 1), 1)
+        );
 
 
         syncSupportPoints(supportPoints);

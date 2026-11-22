@@ -94,6 +94,7 @@ public final class JumperControlPointDisplay {
         for (WireEntity wire : wires) {
 
             List<Vec3> points = wire.getJumperControlPoints();
+            List<Integer> pointIds = wire.getJumperControlPointIds();
 
             for (int i = 0; i < points.size(); i++) {
 
@@ -135,7 +136,7 @@ public final class JumperControlPointDisplay {
                 DebugRenderer.renderFloatingText(
                         poseStack,
                         bufferSource,
-                        String.valueOf(i + 1),
+                        String.valueOf(pointIds.get(i)),
                         position.x - cameraPosition.x,
                         position.y + 0.25 - cameraPosition.y,
                         position.z - cameraPosition.z,

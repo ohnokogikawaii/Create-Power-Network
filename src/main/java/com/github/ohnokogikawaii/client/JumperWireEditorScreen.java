@@ -164,6 +164,7 @@ public class JumperWireEditorScreen extends Screen {
         }
 
         List<Vec3> points = wire.getJumperControlPoints();
+        List<Integer> pointIds = wire.getJumperControlPointIds();
 
         graphics.drawCenteredString(
                 this.font,
@@ -192,7 +193,7 @@ public class JumperWireEditorScreen extends Screen {
 
             graphics.drawString(
                     this.font,
-                    "制御点 " + (i + 1),
+                    "制御点 " + pointIds.get(i),
                     columnX + 3,
                     rowY + 5,
                     0xFFFFFF
