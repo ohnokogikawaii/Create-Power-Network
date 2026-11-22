@@ -273,7 +273,9 @@ public class InsulatorBlock extends BaseEntityBlock
 
     @Override
     public RenderShape getRenderShape(BlockState state) {
-        return RenderShape.MODEL;
+        return type == Type.LOW_VOLTAGE
+                ? RenderShape.INVISIBLE
+                : RenderShape.MODEL;
     }
 
     private VoxelShape getBaseShape() {
@@ -351,9 +353,99 @@ public class InsulatorBlock extends BaseEntityBlock
             BlockPos pos,
             CollisionContext context
     ) {
-        return SHAPE_CACHE
+        VoxelShape shape = SHAPE_CACHE
                 .get(type)
                 .get(state.getValue(FACING));
+
+        if (type != Type.LOW_VOLTAGE
+                || !(level.getBlockEntity(pos)
+                instanceof InsulatorBlockEntity be)
+                || !be.hasGrooveDirection()) {
+            return shape;
+        }
+
+        float facingYaw = getFacingYaw(state);
+        float targetYaw = 90.0F - be.getGrooveYaw();
+
+        return rotateShapeDegrees(
+                shape,
+                targetYaw - facingYaw
+        );
+    }
+
+    private static float getFacingYaw(BlockState state) {
+        return switch (state.getValue(FACING)) {
+            case NORTH -> 0.0F;
+            case EAST -> 90.0F;
+            case SOUTH -> 180.0F;
+            case WEST -> 270.0F;
+            default -> 0.0F;
+        };
+    }
+
+    /**
+     * VoxelShapeを水平面で回転させる。
+     *
+     * VoxelShapeは回転した直方体をそのまま保持できないため、
+     * 回転後の外接AABBで近似する。
+     */
+    private static VoxelShape rotateShapeDegrees(
+            VoxelShape shape,
+            float degrees
+    ) {
+        if (Math.abs(degrees) < 0.001F) {
+            return shape;
+        }
+
+        double radians = Math.toRadians(degrees);
+        double cos = Math.cos(radians);
+        double sin = Math.sin(radians);
+
+        VoxelShape result = Shapes.empty();
+
+        for (AABB box : shape.toAabbs()) {
+            double minX = Double.MAX_VALUE;
+            double maxX = -Double.MAX_VALUE;
+            double minZ = Double.MAX_VALUE;
+            double maxZ = -Double.MAX_VALUE;
+
+            double[][] corners = {
+                    {box.minX, box.minZ},
+                    {box.minX, box.maxZ},
+                    {box.maxX, box.minZ},
+                    {box.maxX, box.maxZ}
+            };
+
+            for (double[] corner : corners) {
+                double x = corner[0] - 0.5;
+                double z = corner[1] - 0.5;
+
+                double rotatedX =
+                        cos * x - sin * z + 0.5;
+
+                double rotatedZ =
+                        sin * x + cos * z + 0.5;
+
+                minX = Math.min(minX, rotatedX);
+                maxX = Math.max(maxX, rotatedX);
+                minZ = Math.min(minZ, rotatedZ);
+                maxZ = Math.max(maxZ, rotatedZ);
+            }
+
+            result = Shapes.or(
+                    result,
+                    Shapes.box(
+                            minX,
+                            box.minY,
+                            minZ,
+                            maxX,
+                            box.maxY,
+                            maxZ
+                    )
+            );
+        }
+
+        return result;
     }
 
     @Override

@@ -1,9 +1,11 @@
 
 package com.github.ohnokogikawaii;
 
+import com.github.ohnokogikawaii.client.InsulatorBlockEntityRenderer;
 import com.github.ohnokogikawaii.client.PASControlCableRenderer;
 import com.github.ohnokogikawaii.client.WireBranchConnectorRenderer;
 import com.github.ohnokogikawaii.client.WireEntityRenderer;
+import com.github.ohnokogikawaii.registry.ModBlockEntities;
 import com.github.ohnokogikawaii.registry.ModEntities;
 import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.resources.ResourceLocation;
@@ -55,6 +57,11 @@ public final class PowerNetworkClient {
         event.registerEntityRenderer(
                 ModEntities.PAS_CONTROL_CABLE.get(),
                 PASControlCableRenderer::new
+        );
+
+        event.registerBlockEntityRenderer(
+                ModBlockEntities.INSULATOR.get(),
+                InsulatorBlockEntityRenderer::new
         );
     }
 
