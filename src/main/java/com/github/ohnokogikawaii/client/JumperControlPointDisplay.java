@@ -7,7 +7,6 @@ import com.github.ohnokogikawaii.wire.WireEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.entity.player.Player;
@@ -16,8 +15,10 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @EventBusSubscriber(
@@ -33,6 +34,34 @@ public final class JumperControlPointDisplay {
     private JumperControlPointDisplay() {
     }
 
+    /**
+     * 編集機を持っているか確認する。
+     */
+    private static boolean isHoldingEditor(Player player) {
+        return player.getMainHandItem().is(
+                ModItems.JUMPER_WIRE_EDITOR.get()
+        ) || player.getOffhandItem().is(
+                ModItems.JUMPER_WIRE_EDITOR.get()
+        );
+    }
+
+    /**
+     * 表示範囲内のジャンパ線を取得する。
+     */
+    private static List<WireEntity> getDisplayWires(
+            Minecraft minecraft,
+            Player player
+    ) {
+        return minecraft.level.getEntitiesOfClass(
+                WireEntity.class,
+                player.getBoundingBox().inflate(DISPLAY_RANGE),
+                wire -> wire.isAlive() && wire.isJumperWire()
+        );
+    }
+
+    /**
+     * ワールド上に制御点の箱を描画する。
+     */
     @SubscribeEvent
     public static void onRenderLevel(RenderLevelStageEvent event) {
 
@@ -48,15 +77,7 @@ public final class JumperControlPointDisplay {
             return;
         }
 
-        boolean holdingEditor =
-                player.getMainHandItem().is(
-                        ModItems.JUMPER_WIRE_EDITOR.get()
-                )
-                        || player.getOffhandItem().is(
-                        ModItems.JUMPER_WIRE_EDITOR.get()
-                );
-
-        if (!holdingEditor) {
+        if (!isHoldingEditor(player)) {
             return;
         }
 
@@ -73,11 +94,7 @@ public final class JumperControlPointDisplay {
                 );
 
         List<WireEntity> wires =
-                minecraft.level.getEntitiesOfClass(
-                        WireEntity.class,
-                        player.getBoundingBox().inflate(DISPLAY_RANGE),
-                        wire -> wire.isAlive() && wire.isJumperWire()
-                );
+                getDisplayWires(minecraft, player);
 
         if (wires.isEmpty()) {
             return;
@@ -87,10 +104,6 @@ public final class JumperControlPointDisplay {
 
         var bufferSource =
                 minecraft.renderBuffers().bufferSource();
-
-        // ==========================================
-        // 制御点の箱を描画
-        // ==========================================
 
         poseStack.pushPose();
 
@@ -162,24 +175,59 @@ public final class JumperControlPointDisplay {
 
         bufferSource.endBatch(RenderType.lines());
         poseStack.popPose();
+    }
 
-        // ==========================================
-        // すべての制御点番号を描画
-        // ==========================================
+    /**
+     * HUD上に制御点番号を表示する。
+     *
+     * ワールド空間の文字描画を使わず、
+     * GuiGraphicsで直接画面に描画する。
+     */
+    @SubscribeEvent
+    public static void onRenderGui(RenderGuiEvent.Post event) {
 
-        Font font = minecraft.font;
+        Minecraft minecraft = Minecraft.getInstance();
+        Player player = minecraft.player;
+
+        if (player == null || minecraft.level == null) {
+            return;
+        }
+
+        if (!isHoldingEditor(player)) {
+            return;
+        }
+
+        List<WireEntity> wires =
+                getDisplayWires(minecraft, player);
+
+        if (wires.isEmpty()) {
+            return;
+        }
+
+        List<String> displayLines = new ArrayList<>();
 
         for (WireEntity wire : wires) {
-
-            if (!wire.isAlive()) {
-                continue;
-            }
 
             List<Vec3> points = wire.getJumperControlPoints();
             List<Integer> pointIds =
                     wire.getJumperControlPointIds();
 
-            int count = Math.min(points.size(), pointIds.size());
+            int count = Math.min(
+                    points.size(),
+                    pointIds.size()
+            );
+
+            if (count == 0) {
+                continue;
+            }
+
+            StringBuilder line = new StringBuilder();
+
+            line.append("ジャンパ線 ")
+                    .append(wire.getId())
+                    .append(" : ");
+
+            boolean hasPoint = false;
 
             for (int i = 0; i < count; i++) {
 
@@ -187,61 +235,64 @@ public final class JumperControlPointDisplay {
                     continue;
                 }
 
-                Vec3 position = points.get(i).add(
-                        0.0,
-                        0.5,
-                        0.0
-                );
+                if (hasPoint) {
+                    line.append("   ");
+                }
 
-                String number =
-                        String.valueOf(pointIds.get(i));
+                line.append("[")
+                        .append(pointIds.get(i))
+                        .append("]");
 
-                // 箱の中心から少し上に配置
-                Vec3 textPosition = new Vec3(
-                        position.x - cameraPosition.x,
-                        position.y + 0.30 - cameraPosition.y,
-                        position.z - cameraPosition.z
-                );
+                hasPoint = true;
+            }
 
-                poseStack.pushPose();
-
-                poseStack.translate(
-                        textPosition.x,
-                        textPosition.y,
-                        textPosition.z
-                );
-
-                // カメラに正面を向ける
-                poseStack.mulPose(
-                        event.getCamera().rotation()
-                );
-
-                poseStack.scale(
-                        -0.025F,
-                        -0.025F,
-                        0.025F
-                );
-
-                float textWidth = font.width(number);
-
-                font.drawInBatch(
-                        number,
-                        -textWidth / 2.0F,
-                        0.0F,
-                        0xFFFFFFFF,
-                        true,
-                        poseStack.last().pose(),
-                        bufferSource,
-                        Font.DisplayMode.SEE_THROUGH,
-                        0x00000000,
-                        15728880
-                );
-
-                poseStack.popPose();
+            if (hasPoint) {
+                displayLines.add(line.toString());
             }
         }
 
-        // すべての番号を描画確定
-        bufferSource.endBatch();
+        if (displayLines.isEmpty()) {
+            return;
+        }
+
+        var guiGraphics = event.getGuiGraphics();
+        var font = minecraft.font;
+
+        int screenWidth = minecraft.getWindow().getGuiScaledWidth();
+        int screenHeight = minecraft.getWindow().getGuiScaledHeight();
+
+        int centerX = screenWidth / 2;
+
+        // ホットバーの少し上に配置
+        int baseY = screenHeight - 70;
+
+        for (int i = 0; i < displayLines.size(); i++) {
+
+            String line = displayLines.get(i);
+
+            int textWidth = font.width(line);
+            int textHeight = 9;
+
+            int x = centerX - textWidth / 2;
+            int y = baseY - i * 13;
+
+            // 背景
+            guiGraphics.fill(
+                    x - 5,
+                    y - 3,
+                    x + textWidth + 5,
+                    y + textHeight + 3,
+                    0xB0000000
+            );
+
+            // 番号
+            guiGraphics.drawCenteredString(
+                    font,
+                    line,
+                    centerX,
+                    y,
+                    0xFFFFFF
+            );
+        }
     }
 }
