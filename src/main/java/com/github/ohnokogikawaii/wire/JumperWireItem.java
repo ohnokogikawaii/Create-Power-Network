@@ -80,7 +80,7 @@ public class JumperWireItem extends WireItem {
         }
 
         Vec3 connection =
-                strainInsulator.getRetainedWirePosition(
+                strainInsulator.getJumperWirePosition(
                         level.getBlockState(clickedPos),
                         clickedPos
                 );

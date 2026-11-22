@@ -148,6 +148,26 @@ public class StrainInsulatorBlock extends BaseEntityBlock
     }
 
     /**
+     * ジャンパ線の接続位置。
+     * strain_insulator.json の "jumper" element の中心を使用する。
+     */
+    public Vec3 getJumperWirePosition(
+            BlockState state,
+            BlockPos pos
+    ) {
+        Vec3 local = rotatePosition(
+                new Vec3(
+                        8.0 / 16.0,
+                        10.5 / 16.0,
+                        4.0 / 16.0
+                ),
+                state.getValue(FACING)
+        );
+
+        return Vec3.atLowerCornerOf(pos).add(local);
+    }
+
+    /**
      * 接続点をブロックの向きに合わせて回転する。
      */
     private static Vec3 rotatePosition(

@@ -43,10 +43,7 @@ public final class JumperWireGeometry {
 
         List<Vec3> anchors = new ArrayList<>();
 
-        anchors.add(
-                wire.getEndpointAWorldPosition()
-                        .add(0.0, 0.5, 0.0)
-        );
+        anchors.add(wire.getEndpointAWorldPosition());
 
         for (Vec3 point : wire.getJumperControlPoints()) {
             anchors.add(point.add(0.0, 0.5, 0.0));
@@ -58,10 +55,7 @@ public final class JumperWireGeometry {
             );
         }
 
-        anchors.add(
-                wire.getEndpointBWorldPosition()
-                        .add(0.0, 0.5, 0.0)
-        );
+        anchors.add(wire.getEndpointBWorldPosition());
 
         if (anchors.size() < 2) {
             return List.copyOf(anchors);
