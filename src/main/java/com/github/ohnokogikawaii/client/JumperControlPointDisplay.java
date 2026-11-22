@@ -131,17 +131,40 @@ public final class JumperControlPointDisplay {
                         1.0F,
                         1.0F
                 );
+            }
+        }
+        /*
+         * 編集機を持った状態で照準が合っている制御点だけ、
+         * 箱の上に固有番号を表示する。
+         */
+        JumperControlPointPlacement.ControlPointAimTarget aimTarget =
+                JumperControlPointPlacement.findAimTarget(
+                        minecraft.level,
+                        player
+                );
 
-                // 箱の上に番号を表示
+        if (aimTarget != null) {
+
+            WireEntity aimedWire = aimTarget.wire();
+            int aimedIndex = aimTarget.index();
+
+            List<Integer> aimedIds =
+                    aimedWire.getJumperControlPointIds();
+
+            if (aimedIndex >= 0
+                    && aimedIndex < aimedIds.size()) {
+
+                Vec3 position = aimTarget.position();
+
                 DebugRenderer.renderFloatingText(
                         poseStack,
                         bufferSource,
-                        String.valueOf(pointIds.get(i)),
+                        String.valueOf(aimedIds.get(aimedIndex)),
                         position.x - cameraPosition.x,
                         position.y + 0.25 - cameraPosition.y,
                         position.z - cameraPosition.z,
                         0xFFFFFF,
-                        0.025F,
+                        0.04F,
                         true,
                         0.0F,
                         false
