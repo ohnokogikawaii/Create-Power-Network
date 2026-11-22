@@ -35,10 +35,20 @@ public class InsulatorBlock extends BaseEntityBlock
         implements WireConnectionPointProvider {
 
     public enum Type {
-        LOW_VOLTAGE,
-        HIGH_VOLTAGE,
-        EXTRA_HIGH_VOLTAGE,
-        TRANSMISSION_LINE
+        LOW_VOLTAGE(5.0),
+        HIGH_VOLTAGE(5.0),
+        EXTRA_HIGH_VOLTAGE(5.0),
+        TRANSMISSION_LINE(5.0);
+
+        private final double maxDeflectionDegrees;
+
+        Type(double maxDeflectionDegrees) {
+            this.maxDeflectionDegrees = maxDeflectionDegrees;
+        }
+
+        public double getMaxDeflectionDegrees() {
+            return maxDeflectionDegrees;
+        }
     }
 
     private final Type type;
@@ -47,15 +57,8 @@ public class InsulatorBlock extends BaseEntityBlock
         return type;
     }
 
-    private static final VoxelShape LOW_SHAPE = Shapes.or(
-            Block.box(4, 0, 4, 12, 2, 12),
-            Block.box(6, 2, 6, 10, 8, 10),
-            Block.box(4, 3, 4, 12, 4, 12),
-            Block.box(5, 5, 5, 11, 6, 11),
-            Block.box(4, 7, 4, 12, 8, 12),
-            Block.box(5, 8, 5, 11, 10, 11),
-            Block.box(7, 10, 7, 9, 12, 9)
-    );
+    private static final VoxelShape LOW_SHAPE =
+            Block.box(0, 0, 12, 16, 16, 16);
 
     private static final VoxelShape HIGH_SHAPE = Shapes.or(
             Block.box(3, 0, 3, 13, 2, 13),

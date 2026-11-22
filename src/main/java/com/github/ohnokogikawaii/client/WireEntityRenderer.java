@@ -1,6 +1,7 @@
 
 package com.github.ohnokogikawaii.client;
 
+import com.github.ohnokogikawaii.insulator.InsulatorBlockEntity;
 import com.github.ohnokogikawaii.wire.JumperWireGeometry;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import com.github.ohnokogikawaii.wire.WireType;
@@ -235,6 +236,39 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                 RenderType.entityCutoutNoCull(metalTexture)
         );
 
+        /*
+         * 固定式碍子の溝に載っている電線を、
+         * 固定用の細い線で押さえる。
+         */
+        for (WireEntity.SupportPoint support : entity.getSupportPoints()) {
+            BlockPos insulatorPos = support.insulatorPos();
+
+            if (!entity.level().hasChunkAt(insulatorPos)) {
+                continue;
+            }
+
+            if (!(entity.level().getBlockEntity(insulatorPos)
+                    instanceof InsulatorBlockEntity insulatorEntity)) {
+                continue;
+            }
+
+            if (!insulatorEntity.hasGrooveDirection()) {
+                continue;
+            }
+
+            Vec3 supportPosition =
+                    support.position().subtract(origin);
+
+            renderSupportTie(
+                    metalBuffer,
+                    pose,
+                    supportPosition,
+                    insulatorEntity.getGrooveYaw(),
+                    radius,
+                    packedLight
+            );
+        }
+
         if (entity.isTerminalA()) {
             InsulatorBlock.Type type =
                     getEndpointInsulatorType(
@@ -280,6 +314,101 @@ public class WireEntityRenderer extends EntityRenderer<WireEntity> {
                         packedLight
                 );
             }
+        }
+    }
+
+    /**
+     * 碍子の溝に置かれた電線を固定するための線を描画する。
+     *
+     * 溝の方向に対して垂直な面にループを作り、
+     * 電線と碍子の頭部を一緒に囲む。
+     */
+    private static void renderSupportTie(
+            VertexConsumer buffer,
+            PoseStack.Pose pose,
+            Vec3 wireCenter,
+            float grooveYaw,
+            double wireRadius,
+            int packedLight
+    ) {
+        double radians = Math.toRadians(grooveYaw);
+
+        // 溝に沿った方向
+        Vec3 grooveDirection = new Vec3(
+                Math.cos(radians),
+                0.0,
+                Math.sin(radians)
+        ).normalize();
+
+        // 溝に対して垂直な水平方向
+        Vec3 sideDirection = new Vec3(
+                -grooveDirection.z,
+                0.0,
+                grooveDirection.x
+        ).normalize();
+
+        // 碍子の頭部を囲むループの中心
+        Vec3 loopCenter = wireCenter.add(
+                0.0,
+                -0.075,
+                0.0
+        );
+
+        // ループの寸法
+        double horizontalRadius = Math.max(
+                0.075,
+                wireRadius * 3.0
+        );
+
+        double verticalRadius = Math.max(
+                0.10,
+                wireRadius * 4.0
+        );
+
+        // 固定用線の太さ
+        double tieRadius = Math.max(
+                0.0035,
+                wireRadius * 0.18
+        );
+
+        final int segments = 16;
+
+        Vec3 previous = null;
+
+        for (int i = 0; i <= segments; i++) {
+            double angle =
+                    Math.PI * 2.0 * i / segments;
+
+            Vec3 current = loopCenter
+                    .add(
+                            sideDirection.scale(
+                                    Math.cos(angle) * horizontalRadius
+                            )
+                    )
+                    .add(
+                            0.0,
+                            Math.sin(angle) * verticalRadius,
+                            0.0
+                    );
+
+            if (previous != null) {
+                Vec3 difference = current.subtract(previous);
+                double length = difference.length();
+
+                if (length > 1.0E-6) {
+                    renderCylinder(
+                            buffer,
+                            pose,
+                            previous.add(current).scale(0.5),
+                            difference.normalize(),
+                            tieRadius,
+                            length,
+                            packedLight
+                    );
+                }
+            }
+
+            previous = current;
         }
     }
 

@@ -3,6 +3,7 @@ package com.github.ohnokogikawaii.client;
 
 import com.github.ohnokogikawaii.PowerNetwork;
 import com.github.ohnokogikawaii.registry.ModItems;
+import com.github.ohnokogikawaii.wire.WireCutterItem;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -28,7 +29,7 @@ import java.util.List;
 )
 public final class JumperControlPointDisplay {
 
-    private static final double DISPLAY_RANGE = 16.0;
+
     private static final double BOX_HALF_SIZE = 0.11;
 
     private JumperControlPointDisplay() {
@@ -46,17 +47,25 @@ public final class JumperControlPointDisplay {
     }
 
     /**
-     * 表示範囲内のジャンパ線を取得する。
+     * 視線が合っているジャンパ線だけを取得する。
+     *
+     * WireCutterItemと同じ電線の照準判定を使用する。
      */
     private static List<WireEntity> getDisplayWires(
             Minecraft minecraft,
             Player player
     ) {
-        return minecraft.level.getEntitiesOfClass(
-                WireEntity.class,
-                player.getBoundingBox().inflate(DISPLAY_RANGE),
-                wire -> wire.isAlive() && wire.isJumperWire()
-        );
+        WireCutterItem.WireAimTarget target =
+                WireCutterItem.findJumperAimTarget(
+                        minecraft.level,
+                        player
+                );
+
+        if (target == null || target.wire() == null) {
+            return List.of();
+        }
+
+        return List.of(target.wire());
     }
 
     /**
@@ -210,17 +219,15 @@ public final class JumperControlPointDisplay {
         for (WireEntity wire : wires) {
 
             List<Vec3> points = wire.getJumperControlPoints();
+            List<Integer> pointIds = wire.getJumperControlPointIds();
 
-            if (points.isEmpty()) {
+            if (points.isEmpty() || pointIds.size() != points.size()) {
                 continue;
             }
 
             StringBuilder line = new StringBuilder();
 
-            line.append("ジャンパ線 ")
-                    .append(" : 始点");
-
-            int displayedNumber = 0;
+            line.append("ジャンパ線 : 始点");
 
             for (int i = 0; i < points.size(); i++) {
 
@@ -228,17 +235,18 @@ public final class JumperControlPointDisplay {
                     continue;
                 }
 
-                displayedNumber++;
+                // 並べ替え後の固有番号をそのまま表示する
+                int pointNumber = pointIds.get(i);
 
                 line.append(" → ")
-                        .append(displayedNumber);
+                        .append(pointNumber);
             }
 
-            if (displayedNumber > 0) {
-                line.append(" → 終点");
-                displayLines.add(line.toString());
-            }
+            line.append(" → 終点");
+
+            displayLines.add(line.toString());
         }
+
 
         if (displayLines.isEmpty()) {
             return;

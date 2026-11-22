@@ -10,6 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionResultHolder;
@@ -33,7 +34,7 @@ public class WireItem extends Item {
 
     private static final double REACH = 6.0;
     private static final double PORT_HIT_DISTANCE = 0.38;
-    private static final double MAX_GROOVE_ANGLE_DIFFERENCE = 5.0;
+
 
 
     private record EndpointSelection(
@@ -478,13 +479,16 @@ public class WireItem extends Item {
                     candidate.yaw()
             );
 
-            if (angleDifference > MAX_GROOVE_ANGLE_DIFFERENCE) {
+            double maxAngle =
+                    insulator.getInsulatorType().getMaxDeflectionDegrees();
+
+            if (angleDifference > maxAngle) {
                 player.displayClientMessage(
                         Component.literal(
                                 String.format(
                                         "電線の角度が溝と合いません。差: %.1f度（許容: %.1f度）",
                                         angleDifference,
-                                        MAX_GROOVE_ANGLE_DIFFERENCE
+                                        maxAngle
                                 )
                         ).withStyle(ChatFormatting.RED),
                         true
@@ -1173,6 +1177,175 @@ public class WireItem extends Item {
         return false;
     }
 
+    private record RoutePoint(
+            BlockPos pos,
+            Vec3 position
+    ) {
+    }
+
+    private static Map<BlockPos, Float> calculateInsulatorGrooveDirections(
+            Level level,
+            Player player,
+            RouteState route,
+            EndpointSelection end
+    ) {
+        List<RoutePoint> points = new ArrayList<>();
+
+        points.add(new RoutePoint(
+                route.start.anchor(),
+                route.start.position()
+        ));
+
+        for (InsulatorSelection support : route.supports) {
+            points.add(new RoutePoint(
+                    support.pos(),
+                    support.position()
+            ));
+        }
+
+        points.add(new RoutePoint(
+                end.anchor(),
+                end.position()
+        ));
+
+        Map<BlockPos, Float> result = new java.util.HashMap<>();
+
+        for (int i = 0; i < points.size(); i++) {
+            RoutePoint current = points.get(i);
+
+            if (!(level.getBlockState(current.pos()).getBlock()
+                    instanceof InsulatorBlock insulator)) {
+                continue;
+            }
+
+            Vec3 incoming;
+            Vec3 outgoing;
+
+            if (i == 0) {
+                incoming = null;
+                outgoing = points.get(i + 1).position()
+                        .subtract(current.position());
+
+            } else if (i == points.size() - 1) {
+                incoming = current.position()
+                        .subtract(points.get(i - 1).position());
+                outgoing = null;
+
+            } else {
+                incoming = current.position()
+                        .subtract(points.get(i - 1).position());
+
+                outgoing = points.get(i + 1).position()
+                        .subtract(current.position());
+            }
+
+            // 溝は水平面の方向なので、高さの変化は角度判定に含めない。
+            if (incoming != null) {
+                incoming = new Vec3(incoming.x, 0.0, incoming.z);
+
+                if (incoming.lengthSqr() < 1.0E-8) {
+                    player.displayClientMessage(
+                            Component.literal(
+                                    "碍子に対する電線の進入方向を計算できません。"
+                            ).withStyle(ChatFormatting.RED),
+                            true
+                    );
+
+                    return null;
+                }
+
+                incoming = incoming.normalize();
+            }
+
+            if (outgoing != null) {
+                outgoing = new Vec3(outgoing.x, 0.0, outgoing.z);
+
+                if (outgoing.lengthSqr() < 1.0E-8) {
+                    player.displayClientMessage(
+                            Component.literal(
+                                    "碍子に対する電線の退出方向を計算できません。"
+                            ).withStyle(ChatFormatting.RED),
+                            true
+                    );
+
+                    return null;
+                }
+
+                outgoing = outgoing.normalize();
+            }
+
+            Vec3 grooveDirection;
+
+            if (incoming == null) {
+                grooveDirection = outgoing;
+            } else if (outgoing == null) {
+                grooveDirection = incoming;
+            } else {
+                double dot = Mth.clamp(
+                        incoming.dot(outgoing),
+                        -1.0,
+                        1.0
+                );
+
+                double deflection = Math.toDegrees(
+                        Math.acos(dot)
+                );
+
+                double maxAngle =
+                        insulator.getInsulatorType()
+                                .getMaxDeflectionDegrees();
+
+                if (deflection > maxAngle) {
+                    player.displayClientMessage(
+                            Component.literal(
+                                    String.format(
+                                            "碍子の許容偏角を超えています。偏角: %.1f度 / 許容: %.1f度",
+                                            deflection,
+                                            maxAngle
+                                    )
+                            ).withStyle(ChatFormatting.RED),
+                            true
+                    );
+
+                    return null;
+                }
+
+                grooveDirection = incoming.add(outgoing);
+
+                if (grooveDirection.lengthSqr() < 1.0E-8) {
+                    grooveDirection = incoming;
+                } else {
+                    grooveDirection = grooveDirection.normalize();
+                }
+            }
+
+            // 現在の溝角度と同じ座標系で計算する。
+            double yaw = Math.toDegrees(
+                    Math.atan2(
+                            grooveDirection.z,
+                            grooveDirection.x
+                    )
+            );
+
+            // 1度単位に丸める。
+            yaw = Math.round(yaw);
+
+            // 碍子の溝は軸方向なので0～180度に正規化する。
+            yaw %= 180.0;
+
+            if (yaw < 0.0) {
+                yaw += 180.0;
+            }
+
+            result.put(
+                    current.pos().immutable(),
+                    (float) yaw
+            );
+        }
+
+        return result;
+    }
+
     private static InteractionResult finishRoute(
             Level level,
             Player player,
@@ -1301,6 +1474,18 @@ public class WireItem extends Item {
 
                 return InteractionResult.SUCCESS;
             }
+        }
+
+        Map<BlockPos, Float> plannedGrooveYaws =
+                calculateInsulatorGrooveDirections(
+                        level,
+                        player,
+                        route,
+                        end
+                );
+
+        if (plannedGrooveYaws == null) {
+            return InteractionResult.SUCCESS;
         }
 
         // 碍子間の既存電線を確認する。
@@ -1489,6 +1674,17 @@ public class WireItem extends Item {
             );
 
             return InteractionResult.SUCCESS;
+        }
+
+        // すべての支持登録が成功した後に溝方向を確定する。
+        for (Map.Entry<BlockPos, Float> entry
+                : plannedGrooveYaws.entrySet()) {
+
+            if (level.getBlockEntity(entry.getKey())
+                    instanceof InsulatorBlockEntity be) {
+
+                be.setGrooveYaw(entry.getValue());
+            }
         }
 
         // 分岐コネクタとの関連付け
