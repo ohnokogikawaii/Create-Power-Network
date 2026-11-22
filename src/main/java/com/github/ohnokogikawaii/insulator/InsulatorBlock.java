@@ -25,11 +25,8 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import com.github.ohnokogikawaii.wire.WireEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.RenderShape;
-import java.util.EnumMap;
-import java.util.Map;
-import java.util.UUID;
 
-import java.util.List;
+import java.util.*;
 
 public class InsulatorBlock extends BaseEntityBlock
         implements WireConnectionPointProvider {
@@ -121,6 +118,9 @@ public class InsulatorBlock extends BaseEntityBlock
      */
     private static final Map<Type, Map<Direction, VoxelShape>> SHAPE_CACHE =
             createShapeCache();
+
+    private static final Map<Long, VoxelShape> LOW_ROTATED_SHAPE_CACHE =
+            new HashMap<>();
 
     private static Map<Type, Map<Direction, VoxelShape>> createShapeCache() {
         Map<Type, Map<Direction, VoxelShape>> cache =
@@ -357,6 +357,7 @@ public class InsulatorBlock extends BaseEntityBlock
                 .get(type)
                 .get(state.getValue(FACING));
 
+        // 低圧用以外は従来の形状を使用
         if (type != Type.LOW_VOLTAGE
                 || !(level.getBlockEntity(pos)
                 instanceof InsulatorBlockEntity be)
@@ -367,7 +368,8 @@ public class InsulatorBlock extends BaseEntityBlock
         float facingYaw = getFacingYaw(state);
         float targetYaw = 90.0F - be.getGrooveYaw();
 
-        return rotateShapeDegrees(
+        return getCachedRotatedShape(
+                state.getValue(FACING),
                 shape,
                 targetYaw - facingYaw
         );
@@ -384,65 +386,134 @@ public class InsulatorBlock extends BaseEntityBlock
     }
 
     /**
-     * VoxelShapeを水平面で回転させる。
-     *
-     * VoxelShapeは回転した直方体をそのまま保持できないため、
-     * 回転後の外接AABBで近似する。
+     * 低圧用碍子の回転済み当たり判定を取得する。
+     * 同じ向き・角度の形状はキャッシュから取得する。
      */
-    private static VoxelShape rotateShapeDegrees(
-            VoxelShape shape,
+    private static synchronized VoxelShape getCachedRotatedShape(
+            Direction facing,
+            VoxelShape originalShape,
             float degrees
     ) {
-        if (Math.abs(degrees) < 0.001F) {
-            return shape;
+        int angle = Math.round(degrees);
+
+        // 角度を -180～180 に正規化
+        angle %= 360;
+
+        if (angle > 180) {
+            angle -= 360;
+        } else if (angle < -180) {
+            angle += 360;
         }
+
+        if (angle == 0) {
+            return originalShape;
+        }
+
+        long key = ((long) facing.ordinal() << 32)
+                | (angle & 0xffffffffL);
+
+        VoxelShape cached = LOW_ROTATED_SHAPE_CACHE.get(key);
+
+        if (cached != null) {
+            return cached;
+        }
+
+        VoxelShape rotated = rotateShapeVoxelized(
+                originalShape,
+                angle
+        );
+
+        LOW_ROTATED_SHAPE_CACHE.put(key, rotated);
+
+        return rotated;
+    }
+
+    /**
+     * 1/64ブロック単位で形状を再構築する。
+     *
+     * 回転後の外接AABBではなく、回転後の各ボクセルを
+     * 元の形状に逆変換して内部判定する。
+     */
+    private static VoxelShape rotateShapeVoxelized(
+            VoxelShape originalShape,
+            int degrees
+    ) {
+        final int RESOLUTION = 64;
+        final double CELL = 1.0 / RESOLUTION;
 
         double radians = Math.toRadians(degrees);
         double cos = Math.cos(radians);
         double sin = Math.sin(radians);
 
+        List<AABB> originalBoxes = originalShape.toAabbs();
+
+        double maxY = 0.0;
+
+        for (AABB box : originalBoxes) {
+            maxY = Math.max(maxY, box.maxY);
+        }
+
+        int maxYIndex = Math.min(
+                RESOLUTION,
+                (int) Math.ceil(maxY * RESOLUTION)
+        );
+
         VoxelShape result = Shapes.empty();
 
-        for (AABB box : shape.toAabbs()) {
-            double minX = Double.MAX_VALUE;
-            double maxX = -Double.MAX_VALUE;
-            double minZ = Double.MAX_VALUE;
-            double maxZ = -Double.MAX_VALUE;
+        for (int y = 0; y < maxYIndex; y++) {
+            double centerY = (y + 0.5) * CELL;
 
-            double[][] corners = {
-                    {box.minX, box.minZ},
-                    {box.minX, box.maxZ},
-                    {box.maxX, box.minZ},
-                    {box.maxX, box.maxZ}
-            };
+            for (int z = 0; z < RESOLUTION; z++) {
+                int runStart = -1;
 
-            for (double[] corner : corners) {
-                double x = corner[0] - 0.5;
-                double z = corner[1] - 0.5;
+                for (int x = 0; x <= RESOLUTION; x++) {
+                    boolean inside = false;
 
-                double rotatedX =
-                        cos * x - sin * z + 0.5;
+                    if (x < RESOLUTION) {
+                        double rotatedX = (x + 0.5) * CELL - 0.5;
+                        double rotatedZ = (z + 0.5) * CELL - 0.5;
 
-                double rotatedZ =
-                        sin * x + cos * z + 0.5;
+                        // 回転前の座標へ逆変換
+                        double sourceX =
+                                cos * rotatedX - sin * rotatedZ + 0.5;
 
-                minX = Math.min(minX, rotatedX);
-                maxX = Math.max(maxX, rotatedX);
-                minZ = Math.min(minZ, rotatedZ);
-                maxZ = Math.max(maxZ, rotatedZ);
+                        double sourceZ =
+                                sin * rotatedX + cos * rotatedZ + 0.5;
+
+                        for (AABB box : originalBoxes) {
+                            if (sourceX >= box.minX
+                                    && sourceX <= box.maxX
+                                    && centerY >= box.minY
+                                    && centerY <= box.maxY
+                                    && sourceZ >= box.minZ
+                                    && sourceZ <= box.maxZ) {
+                                inside = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (inside && runStart < 0) {
+                        runStart = x;
+                    }
+
+                    if (!inside && runStart >= 0) {
+                        result = Shapes.or(
+                                result,
+                                Shapes.box(
+                                        runStart * CELL,
+                                        y * CELL,
+                                        z * CELL,
+                                        x * CELL,
+                                        (y + 1) * CELL,
+                                        (z + 1) * CELL
+                                )
+                        );
+
+                        runStart = -1;
+                    }
+                }
             }
-
-            result = Shapes.or(
-                    result,
-                    Shapes.box(
-                            minX,
-                            box.minY,
-                            minZ,
-                            maxX,
-                            box.maxY,
-                            maxZ
-                    )
-            );
         }
 
         return result;
