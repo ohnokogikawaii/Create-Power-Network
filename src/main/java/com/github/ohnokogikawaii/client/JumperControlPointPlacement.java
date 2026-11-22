@@ -342,7 +342,7 @@ public final class JumperControlPointPlacement {
                                 (float) start.y,
                                 (float) start.z
                         )
-                        .setColor(100, 200, 255, 100)
+                        .setColor(100, 200, 255, 180)
                         .setNormal(pose, 0.0F, 1.0F, 0.0F);
 
                 consumer.addVertex(
@@ -351,7 +351,7 @@ public final class JumperControlPointPlacement {
                                 (float) end.y,
                                 (float) end.z
                         )
-                        .setColor(100, 200, 255, 100)
+                        .setColor(100, 200, 255, 180)
                         .setNormal(pose, 0.0F, 1.0F, 0.0F);
             }
         }
